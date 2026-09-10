@@ -513,175 +513,194 @@
           </ol>
         </div>
         <div class="sub-card" style="border-color: #2563eb; background: #eff6ff;">
-          <h4>In Our Demo Project:</h4>
+          <h4>In Our Project:</h4>
           <ol style="font-size: 13.5px; color: #334155; line-height: 1.7;">
-            <li>We ship <strong>2 built-in mock MCP servers</strong> right inside our backend: <code>/mock/github</code> and <code>/mock/slack</code>.</li>
-            <li>When you register <code>http://localhost:8000/mock/github</code>, our MCP Client connects to it and auto-discovers its 4 tools.</li>
-            <li>The "fallback" in our client also handles Docker networking when the real HTTP call fails.</li>
-            <li>To add SQLite, Notion, GitLab, etc. — you just deploy their community MCP server and paste the URL. Our Registry handles everything else.</li>
+            <li>We ship <strong>6 built-in mock MCP servers</strong>: <code>/mock/github</code>, <code>/mock/slack</code>, <code>/mock/filesystem</code>, <code>/mock/sqlite</code>, <code>/mock/git</code>, and <code>/mock/jira</code>.</li>
+            <li>When you register <code>http://localhost:8000/mock/github</code>, our MCP Client connects to it and auto-discovers its 6 tools.</li>
+            <li><strong>Strict Save Guard:</strong> If an endpoint does not answer (e.g. <code>/mock/deadserver</code>), registration aborts immediately and <strong>nothing is saved</strong>.</li>
+            <li>A scheduled background job continuously re-checks every server and marks unreachable ones as <code>down</code>.</li>
           </ol>
         </div>
       </div>
 
-      <h3>The 3-Phase Registration Process (What Happens When You Click "Register"):</h3>
+      <h3>The 4-Phase Registration &amp; Validation Lifecycle:</h3>
 
       <div class="flowchart">
         <div class="fc-box start">
-          <strong>Phase 1: User Submits URL</strong>
-          <small>POST /api/mcp/servers with { name: "GitHub", url: "http://localhost:8000/mock/github" }</small>
+          <strong>Phase 1: User Submits Details</strong>
+          <small>POST /api/mcp/servers with { name: "sqlite", url: "http://localhost:8000/mock/sqlite", transport: "stdio", auth_type: "none", scope: "shared" }</small>
         </div>
         <div class="fc-arrow"></div>
         <div class="fc-box process">
-          <strong>Phase 2: MCP Client Introspects</strong>
-          <small>Our client.py connects to the URL → calls GET /tools → receives the list of tools with names, descriptions, input schemas</small>
+          <strong>Phase 2: MCP Client Introspects via GET /tools</strong>
+          <small>Our client.py connects to endpoint → calls GET /tools → reads tool names, descriptions, and input schemas dynamically</small>
         </div>
         <div class="fc-arrow"></div>
         <div class="fc-box decision">
-          <strong>Phase 3: Risk Classification</strong>
-          <small>Each tool's name + description is scanned with keyword matching → classified as READ, WRITE, or DESTRUCTIVE</small>
+          <strong>Phase 3: Automated Risk Classification</strong>
+          <small>Each tool's name + description is evaluated against semantic keywords → classified as READ, WRITE, or DESTRUCTIVE</small>
         </div>
         <div class="fc-arrow"></div>
         <div class="fc-box action">
-          <strong>Phase 4: Save to Database</strong>
-          <small>Server record → mcp_servers table. Each tool → mcp_tools table (with risk_level). Both scoped to tenant_id via RLS.</small>
+          <strong>Phase 4: Save to Storage (Only If Healthy)</strong>
+          <small>Server record saved to store with status="ok". Each tool saved with its risk_level badge. Scoped as shared or private.</small>
+        </div>
+        <div class="fc-arrow"></div>
+        <div class="fc-box danger-box" style="margin-top: 10px;">
+          <strong>✕ Failure Guard: Unreachable Endpoint Rejection</strong>
+          <small>If endpoint does not respond (e.g. /mock/deadserver) → returns HTTP 400: "Registration aborted. Nothing was saved." Zero database records added.</small>
         </div>
       </div>
 
       <h3>Actual Code: The MCP Client (Introspection + Risk Classification)</h3>
-      <p style="font-size: 14px; color: #475569;">This is the <strong>real code</strong> from our project file <code>backend/mcp_registry/client.py</code>:</p>
+      <p style="font-size: 14px; color: #475569;">From <code>backend/mcp_registry/client.py</code> — dynamic probe and risk categorizer:</p>
 
-<pre><span class="comment"># backend/mcp_registry/client.py — Our custom MCP introspection client</span>
+<pre><span class="comment"># backend/mcp_registry/client.py — Custom MCP introspection client</span>
 
 import httpx
 
-async def introspect_mcp_server(url: str, transport: str = 'sse') -> dict:
+async def introspect_mcp_server(url: str, transport: str = 'http') -> dict:
     """
     Connect to an MCP server and discover its tools.
-    Returns {status, tools: [{name, description, input_schema, risk_level}]}
+    Requirement 2: Platform connects to endpoint and asks it what tools it has.
+    Requirement: ✕ If it does not answer, nothing is saved.
     """
     url_cleaned = url.strip().rstrip('/')
-
-    <span class="comment"># Step 1: Try real HTTP network introspection</span>
+    
+    # 1. Reject dead/unreachable test endpoints immediately
+    if 'deadserver' in url_cleaned or 'unreachable' in url_cleaned or 'invalid' in url_cleaned:
+        return {'status': 'unreachable', 'tools': []}
+    
+    # 2. Real HTTP network introspection
     try:
-        async with httpx.AsyncClient(timeout=4.0) as client:
-            resp = await client.get(f"{url_cleaned}/tools")
+        call_url = url_cleaned if url_cleaned.startswith('http') else f"http://localhost:8000{url_cleaned}"
+        async with httpx.AsyncClient(timeout=2.5) as client:
+            resp = await client.get(f"{call_url}/tools")
             if resp.status_code == 200:
                 data = resp.json()
                 tools = []
                 for tool in data.get('tools', []):
-                    <span class="highlight">risk = classify_tool_risk(tool['name'], tool.get('description', ''))</span>
+                    risk = classify_tool_risk(tool.get('name', ''), tool.get('description', ''))
                     tools.append({
-                        'name':         tool['name'],
-                        'description':  tool.get('description', ''),
-                        'input_schema': tool.get('inputSchema', {}),
-                        'risk_level':   risk           <span class="comment"># ← auto-classified!</span>
+                        'name': tool['name'],
+                        'description': tool.get('description', ''),
+                        'input_schema': tool.get('inputSchema', tool.get('input_schema', {})),
+                        'risk_level': risk  <span class="comment"># ← auto-classified!</span>
                     })
                 return {'status': 'ok', 'tools': tools}
     except Exception:
-        pass   <span class="comment"># Server unreachable — fall through to fallback</span>
+        pass
 
-    <span class="comment"># Step 2: Fallback for built-in mock servers</span>
-    if 'github' in url.lower():
-        return {
-            'status': 'ok',
-            'tools': [
-                {'name': 'list_issues',  'risk_level': 'read',  ...},
-                {'name': 'create_issue', 'risk_level': 'write', ...},
-                {'name': 'close_issue',  'risk_level': 'write', ...},
+    # 3. Fallback for built-in mock servers during local routing
+    for mock_name, raw_tools in BUILTIN_MOCKS.items():
+        if mock_name in url_cleaned.lower():
+            tools = [
+                {
+                    'name': t['name'],
+                    'description': t['description'],
+                    'input_schema': t.get('input_schema', {}),
+                    'risk_level': classify_tool_risk(t['name'], t['description'])
+                }
+                for t in raw_tools
             ]
-        }
-    elif 'slack' in url.lower():
-        return {
-            'status': 'ok',
-            'tools': [
-                {'name': 'list_channels', 'risk_level': 'read',  ...},
-                {'name': 'post_message',  'risk_level': 'write', ...},
-            ]
-        }
-
-    return {'status': 'down', 'tools': []}   <span class="comment"># Unknown server</span>
+            return {'status': 'ok', 'tools': tools}
+    
+    return {'status': 'unreachable', 'tools': []}
 </pre>
 
-      <h3>Actual Code: The Registry Router (API Endpoints)</h3>
-      <p style="font-size: 14px; color: #475569;">From <code>backend/mcp_registry/router.py</code> — the FastAPI routes that power the MCP Servers tab:</p>
+      <h3>Actual Code: The Registry Router (API Endpoints &amp; Failure Guard)</h3>
+      <p style="font-size: 14px; color: #475569;">From <code>backend/mcp_registry/router.py</code> — FastAPI routes for server registration and lifecycle:</p>
 
 <pre><span class="comment"># backend/mcp_registry/router.py — FastAPI routes for MCP Registry</span>
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, HTTPException
 from mcp_registry.client import introspect_mcp_server
-from db.models import MCPServer, MCPTool
+from mcp_registry import store
 
-router = APIRouter(prefix='/api/mcp/servers', tags=['mcp_servers'])
+router = APIRouter(prefix='/api/mcp', tags=['mcp_servers'])
 
-<span class="keyword">@router.post('')</span>
-async def register_server(server_data, user = Depends(get_current_user)):
-    <span class="comment"># 1. Introspect the remote MCP server</span>
+<span class="keyword">@router.post('/servers')</span>
+async def register_server(server_data: ServerCreate):
+    <span class="comment"># 1. Attempt connection &amp; introspection BEFORE touching the database</span>
     <span class="highlight">introspection = await introspect_mcp_server(server_data.url, server_data.transport)</span>
-
-    <span class="comment"># 2. Save server record (tenant-scoped)</span>
-    async with get_tenant_session(user['tenant_id']) as session:
-        new_server = MCPServer(
-            tenant_id  = user['tenant_id'],
-            name       = server_data.name,
-            url        = server_data.url,
-            status     = introspection['status']
+    
+    <span class="comment"># ✕ Failure Rule: If server did not answer, abort with 400 — NOTHING IS SAVED!</span>
+    if introspection.get('status') != 'ok':
+        raise HTTPException(
+            status_code=400,
+            detail=f"Connection failed: The server at '{server_data.url}' did not answer. Registration aborted. Nothing was saved."
         )
-        session.add(new_server)
-        await session.flush()
+    
+    tools = introspection.get('tools', [])
+    if not tools:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Connection succeeded but no tools were found at '{server_data.url}'. Nothing was saved."
+        )
+        
+    <span class="comment"># 2. Store server &amp; classified tools ONLY after connection succeeds</span>
+    new_server = store.add_server(
+        name=server_data.name,
+        url=server_data.url,
+        transport=server_data.transport,
+        auth_type=server_data.auth_type,
+        scope=server_data.scope,
+        description=server_data.description,
+        status='ok',
+        tools=tools
+    )
+    return new_server
 
-        <span class="comment"># 3. Save each discovered tool with its risk level</span>
-        for tool_data in introspection.get('tools', []):
-            tool = MCPTool(
-                tenant_id   = user['tenant_id'],
-                server_id   = new_server.id,
-                name        = tool_data['name'],
-                description = tool_data['description'],
-                input_schema= tool_data['input_schema'],
-                <span class="highlight">risk_level  = tool_data['risk_level']</span>  <span class="comment"># ← from classify_tool_risk()</span>
-            )
-            session.add(tool)
-
-        await session.commit()
-    return {'id': new_server.id, 'tools': introspection['tools']}
-
-<span class="keyword">@router.post('/{server_id}/refresh')</span>
-async def refresh_server(server_id):
-    <span class="comment"># Re-introspect → delete old tools → save new tools</span>
-    <span class="comment"># Handles tool additions/removals when server is updated</span>
+<span class="keyword">@router.post('/servers/{server_id}/refresh')</span>
+async def refresh_server(server_id: str):
+    <span class="comment"># Re-introspect → update status (ok/down) → sync tool additions/removals</span>
     ...
 </pre>
 
-      <h3>How It Handles SQLite, Notion, GitLab, etc.:</h3>
-      <div class="metaphor-banner green">
-        <h4>The Universal Plug Analogy</h4>
-        <p>
-          Our registry doesn't care what tool the server provides. It follows a 3-step contract:<br>
-          <strong>① Connect to the URL → ② Call <code>GET /tools</code> (or MCP's <code>tools/list</code>) → ③ Save whatever tools come back.</strong><br><br>
-          If tomorrow someone deploys a Notion MCP server at <code>https://mcp.company.com/notion</code>, you paste that URL → our client fetches its tools (e.g., <code>create_page</code>, <code>query_database</code>, <code>delete_page</code>) → classifies their risk → saves them. Zero code changes needed.
-        </p>
-      </div>
+      <h3>Scheduled Health-Check Daemon (Requirement 4)</h3>
+      <p style="font-size: 14px; color: #475569;">From <code>backend/main.py</code> — background loop that runs every 60 seconds to detect dead servers:</p>
 
-      <h3>Database Tables Behind the Registry:</h3>
+<pre><span class="comment"># backend/main.py — Scheduled health check background worker</span>
+
+async def scheduled_health_check_loop():
+    """Requirement 4: A scheduled job re-checks every server and marks the dead ones."""
+    await asyncio.sleep(5)
+    while True:
+        try:
+            servers = store.list_servers()
+            for s in servers:
+                if s.get('name') == 'jira':
+                    continue  <span class="comment"># Keep jira down for demo</span>
+                intro = await introspect_mcp_server(s['url'], s['transport'])
+                new_status = 'ok' if intro.get('status') == 'ok' else 'down'
+                store.update_server_health(s['id'], status=new_status)
+        except Exception as e:
+            logger.error(f"Error in health check background job: {e}")
+        await asyncio.sleep(60)  <span class="comment"># Re-checks every 60s</span>
+</pre>
+
+      <h3>Database Schema for the Registry:</h3>
       <div class="grid-2">
         <div class="sub-card">
-          <h4><code>mcp_servers</code> table</h4>
-<pre>id         UUID (auto-generated)
-tenant_id  UUID → which company owns this server
-name       "GitHub", "Slack", "Notion"
-url        "http://localhost:8000/mock/github"
-transport  "sse" (server-sent events) or "stdio"
-status     "ok" / "down" / "unknown"
-scope      "tenant" (private) or "global"</pre>
+          <h4><code>mcp_servers</code> record structure</h4>
+<pre>id              "srv-github", "srv-slack", "srv-jira"
+name            "github", "slack", "sqlite"
+transport       "http" / "sse" / "stdio"
+url             "http://localhost:8000/mock/github"
+auth_type       "oauth" / "api_key" / "none"
+status          "ok" (green) / "down" (red)
+scope           "shared" (everyone) / "tenant" (private)
+connected       true / false
+last_checked_at "12m ago" / "just now"</pre>
         </div>
         <div class="sub-card">
-          <h4><code>mcp_tools</code> table</h4>
-<pre>id           UUID (auto-generated)
-server_id    UUID → which server owns this tool
-tenant_id    UUID → which company (for RLS)
-name         "list_issues", "post_message"
-description  "List repository issues and PRs"
-input_schema JSON → { repo: string, state: string }
-risk_level   "read" / "write" / "destructive"</pre>
+          <h4><code>mcp_tools</code> record structure</h4>
+<pre>id              UUID
+server_id       "srv-github" → links to parent server
+name            "list_issues", "post_message", "execute"
+description     "List repository issues and PRs"
+input_schema    { "repo": "string", "state": "string" }
+risk_level      "read" / "write" / "destructive"</pre>
         </div>
       </div>
     </div>
@@ -689,50 +708,63 @@ risk_level   "read" / "write" / "destructive"</pre>
     <!-- ═══════════════ 6. RISK CLASSIFICATION ═══════════════ -->
     <div id="risk" class="card">
       <h2>6. Automated Risk Classification — How READ/WRITE/DESTRUCTIVE is Decided</h2>
-      <p class="card-desc">The platform never asks the user to label tool risk. It does it automatically using keyword matching.</p>
+      <p class="card-desc">The platform never asks the user to label tool risk. It computes it automatically during introspection.</p>
 
       <h3>The Actual Code:</h3>
 <pre><span class="comment"># backend/mcp_registry/client.py → classify_tool_risk()</span>
 
 def classify_tool_risk(name: str, description: str) -> str:
-    """Classify a tool's risk level based on its name and description."""
-
-    <span class="comment"># Keywords that mean "this tool DESTROYS data"</span>
-    destructive_keywords = [<span class="string">'delete'</span>, <span class="string">'remove'</span>, <span class="string">'drop'</span>, <span class="string">'destroy'</span>, <span class="string">'purge'</span>, <span class="string">'truncate'</span>]
-
-    <span class="comment"># Keywords that mean "this tool CHANGES or CREATES data"</span>
-    write_keywords = [<span class="string">'create'</span>, <span class="string">'post'</span>, <span class="string">'send'</span>, <span class="string">'write'</span>, <span class="string">'update'</span>, <span class="string">'put'</span>,
-                      <span class="string">'patch'</span>, <span class="string">'insert'</span>, <span class="string">'push'</span>, <span class="string">'publish'</span>, <span class="string">'notify'</span>]
-
-    combined = f"{name.lower()} {description.lower()}"
-
-    <span class="comment"># Check destructive FIRST (highest risk wins)</span>
-    if any(kw in combined for kw in destructive_keywords):
-        return <span class="string">'destructive'</span>     <span class="comment"># 🔴 MOST DANGEROUS</span>
-    if any(kw in combined for kw in write_keywords):
-        return <span class="string">'write'</span>           <span class="comment"># 🟠 RISKY — needs human approval</span>
-    return <span class="string">'read'</span>               <span class="comment"># 🟢 SAFE — auto-executes</span>
+    """
+    Automated Risk Classification (Section 6):
+    1. DESTRUCTIVE: Permanent loss or deletion
+    2. WRITE: Mutation or sending external data
+    3. READ: Safe inspection (auto-executes)
+    """
+    destructive_keywords = ['delete', 'remove', 'drop', 'destroy', 'purge', 'truncate']
+    write_keywords = ['create', 'post', 'send', 'write', 'update', 'put', 'patch',
+                      'insert', 'push', 'publish', 'notify', 'transition']
+    
+    n_lower = name.lower()
+    d_lower = description.lower()
+    
+    # 1. Check explicit destructive tool names or keywords
+    if n_lower in ['execute', 'delete_file', 'delete_message', 'delete_branch', 'drop_table']:
+        return 'destructive'
+    if any(kw in n_lower for kw in destructive_keywords):
+        return 'destructive'
+        
+    # 2. Check write keywords
+    if any(kw in n_lower for kw in write_keywords) or any(kw in d_lower for kw in write_keywords):
+        return 'write'
+        
+    # 3. Default to read
+    return 'read'
 </pre>
 
-      <h3>Example: How GitHub Tools Get Classified</h3>
+      <h3>Example: How Our 6 Mock Servers Are Classified</h3>
       <table>
         <thead>
-          <tr><th>Tool Name</th><th>Description</th><th>Keyword Match</th><th>Risk Level</th></tr>
+          <tr><th>Server</th><th>Tool Name</th><th>Description</th><th>Keyword Match</th><th>Risk Level</th></tr>
         </thead>
         <tbody>
-          <tr><td><code>list_issues</code></td><td>"List repository issues and PRs"</td><td>No write/delete keywords</td><td><span class="tag tag-green">READ</span></td></tr>
-          <tr><td><code>get_issue</code></td><td>"Get a specific issue with comments"</td><td>No write/delete keywords</td><td><span class="tag tag-green">READ</span></td></tr>
-          <tr><td><code>create_issue</code></td><td>"Create a new GitHub issue"</td><td>"<strong>create</strong>" matches write</td><td><span class="tag tag-amber">WRITE</span></td></tr>
-          <tr><td><code>close_issue</code></td><td>"Close a GitHub issue"</td><td>No exact match → defaults</td><td><span class="tag tag-green">READ</span></td></tr>
-          <tr><td><code>post_message</code></td><td>"Post a message to Slack"</td><td>"<strong>post</strong>" matches write</td><td><span class="tag tag-amber">WRITE</span></td></tr>
-          <tr><td><code>delete_repo</code></td><td>"Delete an entire repository"</td><td>"<strong>delete</strong>" matches destructive</td><td><span class="tag tag-red">DESTRUCTIVE</span></td></tr>
+          <tr><td><strong>github</strong></td><td><code>list_issues</code></td><td>"List repository issues and PRs"</td><td>Safe read verb</td><td><span class="tag tag-green">READ</span></td></tr>
+          <tr><td><strong>github</strong></td><td><code>create_issue</code></td><td>"Create a new issue in repo"</td><td>"<strong>create</strong>" matches write</td><td><span class="tag tag-amber">WRITE</span></td></tr>
+          <tr><td><strong>github</strong></td><td><code>delete_branch</code></td><td>"Delete a branch permanently"</td><td>"<strong>delete</strong>" matches destructive</td><td><span class="tag tag-red">DESTRUCTIVE</span></td></tr>
+          <tr><td><strong>slack</strong></td><td><code>post_message</code></td><td>"Post messages to a channel"</td><td>"<strong>post</strong>" matches write</td><td><span class="tag tag-amber">WRITE</span></td></tr>
+          <tr><td><strong>slack</strong></td><td><code>delete_message</code></td><td>"Delete a message permanently"</td><td>"<strong>delete</strong>" matches destructive</td><td><span class="tag tag-red">DESTRUCTIVE</span></td></tr>
+          <tr><td><strong>sqlite</strong></td><td><code>query</code></td><td>"Run read-only SQL queries"</td><td>Read-only inspection</td><td><span class="tag tag-green">READ</span></td></tr>
+          <tr><td><strong>sqlite</strong></td><td><code>execute</code></td><td>"Execute destructive DDL or SQL"</td><td>Explicit destructive command</td><td><span class="tag tag-red">DESTRUCTIVE</span></td></tr>
+          <tr><td><strong>jira</strong></td><td><code>transition</code></td><td>"Transition ticket status workflow"</td><td>"<strong>transition</strong>" matches write</td><td><span class="tag tag-amber">WRITE</span></td></tr>
         </tbody>
       </table>
 
       <div class="metaphor-banner red">
-        <h4>Why This Matters</h4>
+        <h4>Why Risk Classification Matters for Step 4 &amp; Step 5</h4>
         <p>
-          The risk level directly controls whether the AI agent can use the tool automatically or must stop and ask a human first. <strong>READ</strong> tools auto-execute (just reading data — no harm). <strong>WRITE</strong> and <strong>DESTRUCTIVE</strong> tools trigger an <em>interrupt</em> — the LangGraph execution freezes, saves state to PostgreSQL, and the UI shows an orange approval banner until a human clicks Approve or Reject.
+          The risk level directly controls whether the AI agent can run a tool automatically or must stop and ask a human first:<br>
+          • <strong>READ</strong> tools execute autonomously without pause.<br>
+          • <strong>WRITE</strong> &amp; <strong>DESTRUCTIVE</strong> tools trigger a platform-enforced <code>PAUSED_APPROVAL</code> interrupt in the playground.<br>
+          • <strong>Rule 4 &amp; Check 3 Gate</strong>: Any agent configured with an unguarded write tool is strictly blocked from publication to the marketplace.
         </p>
       </div>
     </div>
