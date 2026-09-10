@@ -1,0 +1,1231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Data Sense — Complete Architecture &amp; Low-Level System Design</title>
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --surface-subtle: #f1f5f9;
+      --text-main: #0f172a;
+      --text-muted: #475569;
+      --border: #cbd5e1;
+      --border-light: #e2e8f0;
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --primary-light: #eff6ff;
+      --success: #15803d;
+      --success-light: #f0fdf4;
+      --warning: #b45309;
+      --warning-light: #fffbeb;
+      --danger: #b91c1c;
+      --danger-light: #fef2f2;
+      --purple: #6d28d9;
+      --purple-light: #f5f3ff;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg); color: var(--text-main); line-height: 1.6;
+    }
+
+    /* ─── Header ─── */
+    .header { background: #0f172a; color: #fff; padding: 48px 24px; border-bottom: 5px solid var(--primary); }
+    .header-inner { max-width: 1200px; margin: 0 auto; }
+    .badge { display: inline-block; padding: 6px 14px; font-size: 13px; font-weight: 700; background: rgba(37,99,235,0.3); color: #93c5fd; border: 1px solid #3b82f6; border-radius: 9999px; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; }
+    .header h1 { margin: 0 0 10px 0; font-size: 32px; font-weight: 800; letter-spacing: -0.02em; }
+    .header p { margin: 0; color: #94a3b8; font-size: 16.5px; max-width: 950px; }
+
+    /* ─── TOC ─── */
+    .toc { max-width: 1200px; margin: 32px auto 0; padding: 0 24px; }
+    .toc-inner { background: #fff; border: 1px solid var(--border); border-radius: 16px; padding: 28px 32px; box-shadow: 0 4px 12px rgba(15,23,42,0.04); }
+    .toc-inner h2 { margin: 0 0 14px; font-size: 20px; color: #0f172a; }
+    .toc-inner ol { margin: 0; padding-left: 22px; columns: 2; column-gap: 40px; }
+    .toc-inner li { font-size: 14.5px; color: #334155; padding: 4px 0; break-inside: avoid; }
+    .toc-inner a { color: var(--primary); text-decoration: none; font-weight: 600; }
+    .toc-inner a:hover { text-decoration: underline; }
+
+    /* ─── Container & Cards ─── */
+    .container { max-width: 1200px; margin: 36px auto; padding: 0 24px; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 32px; margin-bottom: 36px; box-shadow: 0 4px 12px rgba(15,23,42,0.04); }
+    .card h2 { font-size: 22px; font-weight: 800; margin-top: 0; margin-bottom: 12px; color: #0f172a; display: flex; align-items: center; gap: 12px; }
+    .card-desc { font-size: 15.5px; color: var(--text-muted); margin-top: 0; margin-bottom: 24px; }
+
+    /* ─── Metaphor banners ─── */
+    .metaphor-banner { background: #eff6ff; border-left: 6px solid #2563eb; border-radius: 0 12px 12px 0; padding: 18px 22px; margin: 20px 0; }
+    .metaphor-banner h4 { margin: 0 0 6px 0; font-size: 15px; color: #1e40af; text-transform: uppercase; letter-spacing: 0.04em; }
+    .metaphor-banner p { margin: 0; font-size: 14.5px; color: #1e293b; }
+    .metaphor-banner.green { background: #f0fdf4; border-color: #16a34a; }
+    .metaphor-banner.green h4 { color: #166534; }
+    .metaphor-banner.amber { background: #fffbeb; border-color: #d97706; }
+    .metaphor-banner.amber h4 { color: #92400e; }
+    .metaphor-banner.red { background: #fef2f2; border-color: #dc2626; }
+    .metaphor-banner.red h4 { color: #991b1b; }
+    .metaphor-banner.purple { background: #f5f3ff; border-color: #7c3aed; }
+    .metaphor-banner.purple h4 { color: #5b21b6; }
+
+    /* ─── Grids ─── */
+    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 24px; margin: 20px 0; }
+    .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; margin: 20px 0; }
+    .sub-card { background: #f8fafc; border: 1px solid var(--border); border-radius: 12px; padding: 22px; }
+    .sub-card h3 { margin-top: 0; font-size: 17px; color: #0f172a; display: flex; align-items: center; gap: 8px; }
+    .sub-card h4 { margin-top: 0; font-size: 15px; color: #334155; }
+
+    /* ─── Flow / Stepper Cards ─── */
+    .flow-card { background: #fff; border: 2px solid #cbd5e1; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.02); }
+    .flow-card-header { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+    .pill-num { min-width: 28px; width: 28px; height: 28px; background: var(--primary); color: #fff; font-weight: bold; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; }
+    .pill-num.warn { background: #d97706; }
+    .pill-num.danger { background: #dc2626; }
+    .pill-num.ok { background: #16a34a; }
+    .pill-num.purple { background: #7c3aed; }
+
+    /* ─── Connector arrow between flow-cards ─── */
+    .connector { display: flex; justify-content: center; margin: -8px 0; }
+    .connector-arrow { width: 3px; height: 24px; background: #94a3b8; position: relative; }
+    .connector-arrow::after { content: ''; position: absolute; bottom: -6px; left: -5px; border-left: 6.5px solid transparent; border-right: 6.5px solid transparent; border-top: 8px solid #94a3b8; }
+
+    /* ─── Architecture Diagram (Pure CSS) ─── */
+    .arch-row { display: flex; align-items: stretch; gap: 16px; margin: 16px 0; flex-wrap: wrap; }
+    .arch-box { flex: 1; min-width: 120px; text-align: center; padding: 16px 12px; border-radius: 12px; font-weight: 700; font-size: 14px; line-height: 1.4; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+    .arch-box small { font-weight: 500; font-size: 11.5px; opacity: 0.85; }
+    .arch-label { flex: none; width: 100%; text-align: center; font-weight: 800; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: #64748b; padding: 8px 0 2px; }
+    .arch-connector-v { display: flex; justify-content: center; margin: -2px 0; }
+    .arch-connector-v span { display: block; width: 3px; height: 28px; background: #94a3b8; position: relative; }
+    .arch-connector-v span::after { content: ''; position: absolute; bottom: -5px; left: -5px; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 7px solid #94a3b8; }
+
+    /* ─── Tables ─── */
+    table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14.5px; }
+    th { background: #f1f5f9; color: #0f172a; text-align: left; padding: 12px 16px; font-weight: 700; border-bottom: 2px solid var(--border); }
+    td { padding: 12px 16px; border-bottom: 1px solid var(--border-light); color: #334155; }
+    tr:hover td { background: #f8fafc; }
+
+    /* ─── Tags ─── */
+    .tag { display: inline-block; padding: 3px 8px; font-size: 11px; font-weight: 700; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .tag-blue { background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
+    .tag-green { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+    .tag-amber { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+    .tag-red { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+    .tag-purple { background: #ede9fe; color: #5b21b6; border: 1px solid #c4b5fd; }
+    .tag-slate { background: #e2e8f0; color: #334155; border: 1px solid #94a3b8; }
+
+    /* ─── Code ─── */
+    code:not(pre code) { font-family: var(--mono); font-size: 13px; background: #e2e8f0; color: #0f172a; padding: 2px 6px; border-radius: 4px; border: 1px solid #cbd5e1; font-weight: 600; }
+    pre { background: #0f172a !important; color: #f8fafc !important; padding: 20px !important; border-radius: 10px !important; font-family: var(--mono) !important; font-size: 13px !important; line-height: 1.65 !important; overflow-x: auto !important; border: 1px solid #334155 !important; margin: 12px 0 20px 0 !important; box-shadow: 0 4px 10px rgba(0,0,0,0.1); white-space: pre; word-wrap: normal; }
+    pre .comment { color: #64748b; }
+    pre .keyword { color: #93c5fd; }
+    pre .string { color: #86efac; }
+    pre .highlight { color: #fbbf24; font-weight: 700; }
+
+    /* ─── Flowchart (Pure CSS) ─── */
+    .flowchart { display: flex; flex-direction: column; align-items: center; gap: 0; margin: 24px auto; max-width: 600px; }
+    .fc-box { width: 100%; max-width: 520px; padding: 16px 20px; border-radius: 12px; text-align: center; font-size: 14px; font-weight: 600; color: #0f172a; position: relative; }
+    .fc-box.start { background: #dbeafe; border: 2px solid #3b82f6; border-radius: 24px; }
+    .fc-box.process { background: #fff; border: 2px solid #cbd5e1; }
+    .fc-box.decision { background: #fef3c7; border: 2px solid #d97706; transform: none; clip-path: none; }
+    .fc-box.action { background: #f0fdf4; border: 2px solid #16a34a; }
+    .fc-box.danger-box { background: #fef2f2; border: 2px solid #dc2626; }
+    .fc-box.end { background: #ede9fe; border: 2px solid #7c3aed; border-radius: 24px; }
+    .fc-box small { display: block; font-weight: 400; font-size: 12px; color: #475569; margin-top: 4px; }
+    .fc-arrow { width: 3px; height: 28px; background: #64748b; margin: 0 auto; position: relative; }
+    .fc-arrow::after { content: ''; position: absolute; bottom: -5px; left: -5px; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 7px solid #64748b; }
+    .fc-label { font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase; margin: 2px 0; }
+
+    /* ─── Section separator ─── */
+    .section-sep { height: 4px; background: linear-gradient(90deg, #2563eb, #7c3aed, #dc2626, #d97706, #16a34a); border-radius: 4px; margin: 40px 0 0 0; }
+
+    /* ─── Footer ─── */
+    .footer { background: #0f172a; color: #94a3b8; padding: 32px 24px; text-align: center; font-size: 13px; margin-top: 48px; }
+    .footer strong { color: #e2e8f0; }
+
+    @media (max-width: 700px) {
+      .grid-2 { grid-template-columns: 1fr; }
+      .grid-3 { grid-template-columns: 1fr; }
+      .arch-row { flex-direction: column; }
+      .toc-inner ol { columns: 1; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div class="header-inner">
+      <div class="badge">Complete Architecture + Low-Level Design</div>
+      <h1>Data Sense — Agent Builder Platform</h1>
+      <p>
+        Full system architecture, flowcharts, tech stack, our custom MCP Registry (with code), the 6-step workflow, and every internal mechanism — explained in plain English with real project code.
+      </p>
+    </div>
+  </div>
+
+  <!-- ═══════════════ TABLE OF CONTENTS ═══════════════ -->
+  <div class="toc">
+    <div class="toc-inner">
+      <h2>📖 Table of Contents</h2>
+      <ol>
+        <li><a href="#problem">Problem Statement &amp; What We're Building</a></li>
+        <li><a href="#techstack">Tech Stack &amp; Frameworks</a></li>
+        <li><a href="#arch">Architecture Diagram (High-Level)</a></li>
+        <li><a href="#workflow">The 6-Step Workflow (Macro Flow)</a></li>
+        <li><a href="#mcp-registry">Our Custom MCP Registry (Deep Dive + Code)</a></li>
+        <li><a href="#risk">Automated Risk Classification (How READ/WRITE/DESTRUCTIVE Works)</a></li>
+        <li><a href="#vault">Credential Vault (Fernet Encryption)</a></li>
+        <li><a href="#build-engine">Build Engine — LangGraph 4-Step Brain</a></li>
+        <li><a href="#rls">Database Bouncer — PostgreSQL Row-Level Security</a></li>
+        <li><a href="#scoring">Scoring Engine (100-Point Inspection)</a></li>
+        <li><a href="#hitl">Human-in-the-Loop (Interrupt + Approval)</a></li>
+        <li><a href="#lifecycle">Complete Request Lifecycle (Byte-by-Byte)</a></li>
+        <li><a href="#marketplace">Marketplace &amp; Cross-Tenant Installation</a></li>
+        <li><a href="#folder">Project Folder Map</a></li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="container">
+
+    <!-- ═══════════════ 1. PROBLEM STATEMENT ═══════════════ -->
+    <div id="problem" class="card">
+      <h2>1. Problem Statement — What Are We Building?</h2>
+      <p class="card-desc">The single paragraph that defines the entire capstone project.</p>
+
+      <div class="metaphor-banner purple">
+        <h4>The Problem</h4>
+        <p>
+          Today, building an AI agent requires deep coding skills — you must write Python scripts, manage API keys manually, wire up tool integrations, and pray nothing goes wrong in production. There's no safety net if the AI decides to delete a database or post sensitive information to a public Slack channel.
+        </p>
+      </div>
+
+      <div class="metaphor-banner green">
+        <h4>Our Solution</h4>
+        <p>
+          <strong>Data Sense</strong> is a multi-tenant web platform where any employee (no coding required) can <strong>describe</strong> what they want an AI agent to do in plain English, and the platform automatically builds, tests, scores, and publishes that agent — with mandatory human approval for any risky actions. Think of it as an "App Store for AI Agents" inside your company.
+        </p>
+      </div>
+
+      <h3>The 6 Things a User Can Do (The Core Journey):</h3>
+      <div class="grid-3">
+        <div class="sub-card" style="border-left: 4px solid #2563eb;">
+          <h4>① Register a Tool Server</h4>
+          <p style="font-size:13.5px; margin:0; color:#475569;">Paste a URL to a tool server (GitHub, Slack, Notion, etc.) and let the platform auto-discover its tools.</p>
+        </div>
+        <div class="sub-card" style="border-left: 4px solid #7c3aed;">
+          <h4>② Connect Credentials</h4>
+          <p style="font-size:13.5px; margin:0; color:#475569;">Securely store your API token for each server — encrypted, never shown again.</p>
+        </div>
+        <div class="sub-card" style="border-left: 4px solid #d97706;">
+          <h4>③ Describe an Agent</h4>
+          <p style="font-size:13.5px; margin:0; color:#475569;">Type in plain English what the agent should do. The platform builds its brain (config) through a 4-step guided conversation.</p>
+        </div>
+        <div class="sub-card" style="border-left: 4px solid #16a34a;">
+          <h4>④ Test in Playground</h4>
+          <p style="font-size:13.5px; margin:0; color:#475569;">Chat with the agent live. Risky actions (write/delete) pause and ask you for permission.</p>
+        </div>
+        <div class="sub-card" style="border-left: 4px solid #dc2626;">
+          <h4>⑤ Publish to Marketplace</h4>
+          <p style="font-size:13.5px; margin:0; color:#475569;">After scoring Grade B or above, submit for admin review. Approved agents enter the public Marketplace.</p>
+        </div>
+        <div class="sub-card" style="border-left: 4px solid #0f172a;">
+          <h4>⑥ Install Someone Else's Agent</h4>
+          <p style="font-size:13.5px; margin:0; color:#475569;">Browse the Marketplace, install an agent into your company, connect your own credentials, and run it.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ 2. TECH STACK ═══════════════ -->
+    <div id="techstack" class="card">
+      <h2>2. Tech Stack &amp; Frameworks</h2>
+      <p class="card-desc">Every tool, library, and framework used — and <em>why</em> we chose it.</p>
+
+      <table>
+        <thead>
+          <tr><th>Layer</th><th>Technology</th><th>What It Does (Layman)</th><th>Why We Chose It</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="tag tag-blue">Frontend</span></td>
+            <td><strong>React 18 + Vite</strong></td>
+            <td>The web page you see in the browser. React builds interactive screens; Vite makes the dev server fast.</td>
+            <td>Industry standard, component-based UI, hot reload.</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-blue">Frontend</span></td>
+            <td><strong>Zustand</strong></td>
+            <td>Tiny state manager — stores who is logged in, which tab is active, etc. across all pages.</td>
+            <td>Simpler than Redux, only 1 KB.</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-blue">Frontend</span></td>
+            <td><strong>Axios</strong></td>
+            <td>Sends HTTP requests (GET, POST, DELETE) from the browser to the backend. Auto-attaches the login token.</td>
+            <td>Interceptors for auth headers, built-in error handling.</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-green">Backend</span></td>
+            <td><strong>FastAPI (Python)</strong></td>
+            <td>The server that receives browser requests, processes them, and returns JSON. Like a waiter in a restaurant.</td>
+            <td>Async (fast), auto-generates API docs at /docs, type-checked with Pydantic.</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-green">Backend</span></td>
+            <td><strong>LangGraph (open source)</strong></td>
+            <td>The "brain engine" — turns a JSON config into a running AI workflow with steps, decisions, and pauses.</td>
+            <td>Built-in checkpointing, interrupt/resume, multi-agent support.</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-green">Backend</span></td>
+            <td><strong>LangChain Core</strong></td>
+            <td>Provides the message format (HumanMessage, AIMessage) and tool-calling interface that LangGraph uses.</td>
+            <td>Standardizes how we talk to any LLM (Gemini, GPT, Ollama).</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-green">Backend</span></td>
+            <td><strong>MCP SDK (Python)</strong></td>
+            <td>Model Context Protocol client — lets us connect to any MCP-compatible tool server and discover its tools.</td>
+            <td>Open standard by Anthropic, supported by 100+ tool servers.</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-purple">Database</span></td>
+            <td><strong>PostgreSQL 16</strong></td>
+            <td>The main database — stores users, agents, tools, runs, credentials, marketplace listings.</td>
+            <td>Row-Level Security (RLS) for multi-tenant isolation — no other DB has this.</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-purple">Database</span></td>
+            <td><strong>SQLAlchemy (async)</strong></td>
+            <td>Python library that translates Python objects into SQL queries. We never write raw SQL in app code.</td>
+            <td>Type-safe ORM, async support, works with PostgreSQL RLS.</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-amber">Security</span></td>
+            <td><strong>Fernet (AES-128-CBC)</strong></td>
+            <td>Encrypts API tokens before storing them. Only the master key can decrypt. Like a bank safe.</td>
+            <td>Symmetric encryption from Python's cryptography library. Fast, proven.</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-amber">Security</span></td>
+            <td><strong>JWT (JSON Web Token)</strong></td>
+            <td>The "login ticket" — after you sign in, the server gives you a signed token. Every request shows this ticket.</td>
+            <td>Stateless auth, carries user_id + tenant_id, expires after 24 hours.</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-amber">Security</span></td>
+            <td><strong>bcrypt (passlib)</strong></td>
+            <td>Hashes passwords so even if the database leaks, nobody can read the original password.</td>
+            <td>Industry standard, deliberately slow to prevent brute-force attacks.</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-red">Infra</span></td>
+            <td><strong>Docker Compose</strong></td>
+            <td>One command (<code>docker compose up</code>) starts PostgreSQL, Redis, backend, and frontend together.</td>
+            <td>Reproducible environment, works identically on every developer's machine.</td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-red">Infra</span></td>
+            <td><strong>Redis</strong></td>
+            <td>In-memory cache for fast session lookups and rate limiting.</td>
+            <td>Sub-millisecond reads, pub/sub for real-time updates.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ═══════════════ 3. ARCHITECTURE DIAGRAM ═══════════════ -->
+    <div id="arch" class="card">
+      <h2>3. Architecture Diagram</h2>
+      <p class="card-desc">How all the pieces connect — from your browser to the database and back.</p>
+
+      <!-- Layer 1: Browser -->
+      <div class="arch-label">👤 BROWSER (Your Laptop)</div>
+      <div class="arch-row">
+        <div class="arch-box" style="background: #dbeafe; border: 2px solid #3b82f6;">
+          React Frontend<small>Port 3000 • Vite Dev Server</small>
+        </div>
+        <div class="arch-box" style="background: #dbeafe; border: 2px solid #3b82f6;">
+          Zustand Store<small>Auth state, active tab, agent list</small>
+        </div>
+        <div class="arch-box" style="background: #dbeafe; border: 2px solid #3b82f6;">
+          Axios HTTP Client<small>Attaches JWT to every request</small>
+        </div>
+      </div>
+
+      <div class="arch-connector-v"><span></span></div>
+      <div style="text-align:center; font-size:11px; color:#64748b; font-weight:700;">HTTPS + JSON</div>
+      <div class="arch-connector-v"><span></span></div>
+
+      <!-- Layer 2: FastAPI -->
+      <div class="arch-label">⚙️ BACKEND (FastAPI Server — Port 8000)</div>
+      <div class="arch-row">
+        <div class="arch-box" style="background: #f0fdf4; border: 2px solid #16a34a;">
+          Auth Router<small>/api/auth/*</small>
+        </div>
+        <div class="arch-box" style="background: #f0fdf4; border: 2px solid #16a34a;">
+          MCP Registry Router<small>/api/mcp/servers/*</small>
+        </div>
+        <div class="arch-box" style="background: #f0fdf4; border: 2px solid #16a34a;">
+          Connections Router<small>/api/connections/*</small>
+        </div>
+        <div class="arch-box" style="background: #f0fdf4; border: 2px solid #16a34a;">
+          Build Router<small>/api/build/*</small>
+        </div>
+        <div class="arch-box" style="background: #f0fdf4; border: 2px solid #16a34a;">
+          Agents Router<small>/api/agents/*</small>
+        </div>
+      </div>
+      <div class="arch-row">
+        <div class="arch-box" style="background: #f0fdf4; border: 2px solid #16a34a;">
+          Marketplace Router<small>/api/marketplace/*</small>
+        </div>
+        <div class="arch-box" style="background: #f0fdf4; border: 2px solid #16a34a;">
+          Admin Router<small>/api/admin/*</small>
+        </div>
+        <div class="arch-box" style="background: #fffbeb; border: 2px solid #d97706;">
+          Credential Vault<small>Fernet AES encrypt/decrypt</small>
+        </div>
+        <div class="arch-box" style="background: #fffbeb; border: 2px solid #d97706;">
+          Scoring Engine<small>Deterministic 100-pt checks</small>
+        </div>
+        <div class="arch-box" style="background: #fffbeb; border: 2px solid #d97706;">
+          Marketplace Sanitizer<small>Regex strips secrets</small>
+        </div>
+      </div>
+
+      <div class="arch-connector-v"><span></span></div>
+
+      <!-- Layer 3: LangGraph + MCP -->
+      <div class="arch-label">🧠 AI ENGINE (LangGraph + MCP)</div>
+      <div class="arch-row">
+        <div class="arch-box" style="background: #ede9fe; border: 2px solid #7c3aed; flex: 2;">
+          LangGraph Runtime<small>Reads AgentConfig JSON → builds a state machine → runs nodes → handles interrupts</small>
+        </div>
+        <div class="arch-box" style="background: #fef2f2; border: 2px solid #dc2626; flex: 1;">
+          Our Custom MCP Registry<small>Stores server URLs + auto-discovered tools + risk labels</small>
+        </div>
+        <div class="arch-box" style="background: #fef2f2; border: 2px solid #dc2626; flex: 1;">
+          MCP Client (Introspector)<small>Connects to any MCP server → fetches tool list</small>
+        </div>
+      </div>
+
+      <div class="arch-connector-v"><span></span></div>
+
+      <!-- Layer 4: External Tool Servers -->
+      <div class="arch-label">🔧 EXTERNAL MCP TOOL SERVERS (or our built-in mocks)</div>
+      <div class="arch-row">
+        <div class="arch-box" style="background: #f1f5f9; border: 2px solid #94a3b8;">
+          GitHub MCP Server<small>/mock/github or real server</small>
+        </div>
+        <div class="arch-box" style="background: #f1f5f9; border: 2px solid #94a3b8;">
+          Slack MCP Server<small>/mock/slack or real server</small>
+        </div>
+        <div class="arch-box" style="background: #f1f5f9; border: 2px solid #94a3b8;">
+          Any Future Server<small>SQLite, Notion, GitLab, JIRA…</small>
+        </div>
+      </div>
+
+      <div class="arch-connector-v"><span></span></div>
+
+      <!-- Layer 5: Database -->
+      <div class="arch-label">🗄️ DATA LAYER</div>
+      <div class="arch-row">
+        <div class="arch-box" style="background: #fce7f3; border: 2px solid #db2777; flex: 2;">
+          PostgreSQL 16<small>11 tables • RLS enforced • Checkpoint storage for LangGraph</small>
+        </div>
+        <div class="arch-box" style="background: #fce7f3; border: 2px solid #db2777; flex: 1;">
+          Redis<small>Session cache • Rate limiting</small>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ 4. THE 6-STEP WORKFLOW ═══════════════ -->
+    <div id="workflow" class="card">
+      <h2>4. The 6-Step Workflow (End-to-End Flowchart)</h2>
+      <p class="card-desc">Trace the complete journey from registering a tool server to someone else installing your agent.</p>
+
+      <div class="flowchart">
+        <div class="fc-box start">
+          <strong>STEP 1: Register a Tool Server</strong>
+          <small>User pastes MCP server URL → Platform hits /api/mcp/servers → MCP Client introspects → auto-discovers tools → saves to DB</small>
+        </div>
+        <div class="fc-arrow"></div>
+
+        <div class="fc-box process">
+          <strong>STEP 2: Connect Credentials</strong>
+          <small>User pastes API token → Fernet encrypts it → ciphertext saved to connections table → raw token wiped from RAM → UI shows ••••••••</small>
+        </div>
+        <div class="fc-arrow"></div>
+
+        <div class="fc-box decision">
+          <strong>STEP 3: Describe the Agent (4-Step Build)</strong>
+          <small>User types plain English → LangGraph runs 4 sub-steps: Understand → Suggest Servers → Wire Connections → Generate Config. Pauses with interrupts at steps 2 &amp; 3 for human confirmation.</small>
+        </div>
+        <div class="fc-arrow"></div>
+
+        <div class="fc-box action">
+          <strong>STEP 4: Test in Playground</strong>
+          <small>User chats with agent → Supervisor routes to worker nodes → READ tools auto-execute → WRITE tools pause with orange "Approve / Reject" banner → human approves → tool fires</small>
+        </div>
+        <div class="fc-arrow"></div>
+
+        <div class="fc-box danger-box">
+          <strong>STEP 5: Publish for Review</strong>
+          <small>Scoring engine grades the agent (Functionality + Safety) → Must be Grade B+ → Sanitizer strips all company data, secrets, emails → Admin reviews → Approved → Goes to Marketplace</small>
+        </div>
+        <div class="fc-arrow"></div>
+
+        <div class="fc-box end">
+          <strong>STEP 6: Install from Marketplace</strong>
+          <small>Another company browses Marketplace → clicks Install → config_template copied to their tenant → prompted to connect their own credentials → now they have the agent running in their company</small>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ 5. MCP REGISTRY DEEP DIVE ═══════════════ -->
+    <div id="mcp-registry" class="card">
+      <h2>5. Our Custom MCP Registry — Deep Dive + Code</h2>
+      <p class="card-desc">We built our own MCP Registry from scratch. Here's exactly how it works and why.</p>
+
+      <div class="metaphor-banner">
+        <h4>What is MCP?</h4>
+        <p>
+          <strong>MCP (Model Context Protocol)</strong> is an open standard (created by Anthropic) that defines a common language for AI agents to talk to external tools. Think of it as "USB-C for AI tools" — one universal plug that fits GitHub, Slack, Notion, SQLite, or any service that builds an MCP server.
+        </p>
+      </div>
+
+      <div class="metaphor-banner amber">
+        <h4>Why Build Our OWN Registry?</h4>
+        <p>
+          MCP itself is just a protocol (a set of rules), like how HTTP is a protocol. It doesn't come with a ready-made phone book of servers. In production, each company needs to track <em>which</em> MCP servers they have registered, <em>what tools</em> each server offers, and <em>how risky</em> each tool is. That phone book is our custom MCP Registry — stored in two PostgreSQL tables: <code>mcp_servers</code> and <code>mcp_tools</code>.
+        </p>
+      </div>
+
+      <h3>How a User Finds MCP Servers — Step by Step:</h3>
+      <div class="grid-2">
+        <div class="sub-card">
+          <h4>In Real-World Production:</h4>
+          <ol style="font-size: 13.5px; color: #334155; line-height: 1.7;">
+            <li>Your company's IT admin deploys MCP servers (e.g., <code>github-mcp-server</code> is an open-source npm package).</li>
+            <li>Each deployed server runs at a known URL (e.g., <code>https://mcp.yourcompany.com/github</code>).</li>
+            <li>You go to the "MCP Servers" tab in our platform, click "+ Register Server", and paste that URL.</li>
+            <li>Official MCP registries exist (like <a href="https://github.com/modelcontextprotocol/servers" style="color:#2563eb;">github.com/modelcontextprotocol/servers</a>) that list 100+ community-built servers.</li>
+          </ol>
+        </div>
+        <div class="sub-card" style="border-color: #2563eb; background: #eff6ff;">
+          <h4>In Our Demo Project:</h4>
+          <ol style="font-size: 13.5px; color: #334155; line-height: 1.7;">
+            <li>We ship <strong>2 built-in mock MCP servers</strong> right inside our backend: <code>/mock/github</code> and <code>/mock/slack</code>.</li>
+            <li>When you register <code>http://localhost:8000/mock/github</code>, our MCP Client connects to it and auto-discovers its 4 tools.</li>
+            <li>The "fallback" in our client also handles Docker networking when the real HTTP call fails.</li>
+            <li>To add SQLite, Notion, GitLab, etc. — you just deploy their community MCP server and paste the URL. Our Registry handles everything else.</li>
+          </ol>
+        </div>
+      </div>
+
+      <h3>The 3-Phase Registration Process (What Happens When You Click "Register"):</h3>
+
+      <div class="flowchart">
+        <div class="fc-box start">
+          <strong>Phase 1: User Submits URL</strong>
+          <small>POST /api/mcp/servers with { name: "GitHub", url: "http://localhost:8000/mock/github" }</small>
+        </div>
+        <div class="fc-arrow"></div>
+        <div class="fc-box process">
+          <strong>Phase 2: MCP Client Introspects</strong>
+          <small>Our client.py connects to the URL → calls GET /tools → receives the list of tools with names, descriptions, input schemas</small>
+        </div>
+        <div class="fc-arrow"></div>
+        <div class="fc-box decision">
+          <strong>Phase 3: Risk Classification</strong>
+          <small>Each tool's name + description is scanned with keyword matching → classified as READ, WRITE, or DESTRUCTIVE</small>
+        </div>
+        <div class="fc-arrow"></div>
+        <div class="fc-box action">
+          <strong>Phase 4: Save to Database</strong>
+          <small>Server record → mcp_servers table. Each tool → mcp_tools table (with risk_level). Both scoped to tenant_id via RLS.</small>
+        </div>
+      </div>
+
+      <h3>Actual Code: The MCP Client (Introspection + Risk Classification)</h3>
+      <p style="font-size: 14px; color: #475569;">This is the <strong>real code</strong> from our project file <code>backend/mcp_registry/client.py</code>:</p>
+
+<pre><span class="comment"># backend/mcp_registry/client.py — Our custom MCP introspection client</span>
+
+import httpx
+
+async def introspect_mcp_server(url: str, transport: str = 'sse') -> dict:
+    """
+    Connect to an MCP server and discover its tools.
+    Returns {status, tools: [{name, description, input_schema, risk_level}]}
+    """
+    url_cleaned = url.strip().rstrip('/')
+
+    <span class="comment"># Step 1: Try real HTTP network introspection</span>
+    try:
+        async with httpx.AsyncClient(timeout=4.0) as client:
+            resp = await client.get(f"{url_cleaned}/tools")
+            if resp.status_code == 200:
+                data = resp.json()
+                tools = []
+                for tool in data.get('tools', []):
+                    <span class="highlight">risk = classify_tool_risk(tool['name'], tool.get('description', ''))</span>
+                    tools.append({
+                        'name':         tool['name'],
+                        'description':  tool.get('description', ''),
+                        'input_schema': tool.get('inputSchema', {}),
+                        'risk_level':   risk           <span class="comment"># ← auto-classified!</span>
+                    })
+                return {'status': 'ok', 'tools': tools}
+    except Exception:
+        pass   <span class="comment"># Server unreachable — fall through to fallback</span>
+
+    <span class="comment"># Step 2: Fallback for built-in mock servers</span>
+    if 'github' in url.lower():
+        return {
+            'status': 'ok',
+            'tools': [
+                {'name': 'list_issues',  'risk_level': 'read',  ...},
+                {'name': 'create_issue', 'risk_level': 'write', ...},
+                {'name': 'close_issue',  'risk_level': 'write', ...},
+            ]
+        }
+    elif 'slack' in url.lower():
+        return {
+            'status': 'ok',
+            'tools': [
+                {'name': 'list_channels', 'risk_level': 'read',  ...},
+                {'name': 'post_message',  'risk_level': 'write', ...},
+            ]
+        }
+
+    return {'status': 'down', 'tools': []}   <span class="comment"># Unknown server</span>
+</pre>
+
+      <h3>Actual Code: The Registry Router (API Endpoints)</h3>
+      <p style="font-size: 14px; color: #475569;">From <code>backend/mcp_registry/router.py</code> — the FastAPI routes that power the MCP Servers tab:</p>
+
+<pre><span class="comment"># backend/mcp_registry/router.py — FastAPI routes for MCP Registry</span>
+
+from fastapi import APIRouter, Depends
+from mcp_registry.client import introspect_mcp_server
+from db.models import MCPServer, MCPTool
+
+router = APIRouter(prefix='/api/mcp/servers', tags=['mcp_servers'])
+
+<span class="keyword">@router.post('')</span>
+async def register_server(server_data, user = Depends(get_current_user)):
+    <span class="comment"># 1. Introspect the remote MCP server</span>
+    <span class="highlight">introspection = await introspect_mcp_server(server_data.url, server_data.transport)</span>
+
+    <span class="comment"># 2. Save server record (tenant-scoped)</span>
+    async with get_tenant_session(user['tenant_id']) as session:
+        new_server = MCPServer(
+            tenant_id  = user['tenant_id'],
+            name       = server_data.name,
+            url        = server_data.url,
+            status     = introspection['status']
+        )
+        session.add(new_server)
+        await session.flush()
+
+        <span class="comment"># 3. Save each discovered tool with its risk level</span>
+        for tool_data in introspection.get('tools', []):
+            tool = MCPTool(
+                tenant_id   = user['tenant_id'],
+                server_id   = new_server.id,
+                name        = tool_data['name'],
+                description = tool_data['description'],
+                input_schema= tool_data['input_schema'],
+                <span class="highlight">risk_level  = tool_data['risk_level']</span>  <span class="comment"># ← from classify_tool_risk()</span>
+            )
+            session.add(tool)
+
+        await session.commit()
+    return {'id': new_server.id, 'tools': introspection['tools']}
+
+<span class="keyword">@router.post('/{server_id}/refresh')</span>
+async def refresh_server(server_id):
+    <span class="comment"># Re-introspect → delete old tools → save new tools</span>
+    <span class="comment"># Handles tool additions/removals when server is updated</span>
+    ...
+</pre>
+
+      <h3>How It Handles SQLite, Notion, GitLab, etc.:</h3>
+      <div class="metaphor-banner green">
+        <h4>The Universal Plug Analogy</h4>
+        <p>
+          Our registry doesn't care what tool the server provides. It follows a 3-step contract:<br>
+          <strong>① Connect to the URL → ② Call <code>GET /tools</code> (or MCP's <code>tools/list</code>) → ③ Save whatever tools come back.</strong><br><br>
+          If tomorrow someone deploys a Notion MCP server at <code>https://mcp.company.com/notion</code>, you paste that URL → our client fetches its tools (e.g., <code>create_page</code>, <code>query_database</code>, <code>delete_page</code>) → classifies their risk → saves them. Zero code changes needed.
+        </p>
+      </div>
+
+      <h3>Database Tables Behind the Registry:</h3>
+      <div class="grid-2">
+        <div class="sub-card">
+          <h4><code>mcp_servers</code> table</h4>
+<pre>id         UUID (auto-generated)
+tenant_id  UUID → which company owns this server
+name       "GitHub", "Slack", "Notion"
+url        "http://localhost:8000/mock/github"
+transport  "sse" (server-sent events) or "stdio"
+status     "ok" / "down" / "unknown"
+scope      "tenant" (private) or "global"</pre>
+        </div>
+        <div class="sub-card">
+          <h4><code>mcp_tools</code> table</h4>
+<pre>id           UUID (auto-generated)
+server_id    UUID → which server owns this tool
+tenant_id    UUID → which company (for RLS)
+name         "list_issues", "post_message"
+description  "List repository issues and PRs"
+input_schema JSON → { repo: string, state: string }
+risk_level   "read" / "write" / "destructive"</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ 6. RISK CLASSIFICATION ═══════════════ -->
+    <div id="risk" class="card">
+      <h2>6. Automated Risk Classification — How READ/WRITE/DESTRUCTIVE is Decided</h2>
+      <p class="card-desc">The platform never asks the user to label tool risk. It does it automatically using keyword matching.</p>
+
+      <h3>The Actual Code:</h3>
+<pre><span class="comment"># backend/mcp_registry/client.py → classify_tool_risk()</span>
+
+def classify_tool_risk(name: str, description: str) -> str:
+    """Classify a tool's risk level based on its name and description."""
+
+    <span class="comment"># Keywords that mean "this tool DESTROYS data"</span>
+    destructive_keywords = [<span class="string">'delete'</span>, <span class="string">'remove'</span>, <span class="string">'drop'</span>, <span class="string">'destroy'</span>, <span class="string">'purge'</span>, <span class="string">'truncate'</span>]
+
+    <span class="comment"># Keywords that mean "this tool CHANGES or CREATES data"</span>
+    write_keywords = [<span class="string">'create'</span>, <span class="string">'post'</span>, <span class="string">'send'</span>, <span class="string">'write'</span>, <span class="string">'update'</span>, <span class="string">'put'</span>,
+                      <span class="string">'patch'</span>, <span class="string">'insert'</span>, <span class="string">'push'</span>, <span class="string">'publish'</span>, <span class="string">'notify'</span>]
+
+    combined = f"{name.lower()} {description.lower()}"
+
+    <span class="comment"># Check destructive FIRST (highest risk wins)</span>
+    if any(kw in combined for kw in destructive_keywords):
+        return <span class="string">'destructive'</span>     <span class="comment"># 🔴 MOST DANGEROUS</span>
+    if any(kw in combined for kw in write_keywords):
+        return <span class="string">'write'</span>           <span class="comment"># 🟠 RISKY — needs human approval</span>
+    return <span class="string">'read'</span>               <span class="comment"># 🟢 SAFE — auto-executes</span>
+</pre>
+
+      <h3>Example: How GitHub Tools Get Classified</h3>
+      <table>
+        <thead>
+          <tr><th>Tool Name</th><th>Description</th><th>Keyword Match</th><th>Risk Level</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>list_issues</code></td><td>"List repository issues and PRs"</td><td>No write/delete keywords</td><td><span class="tag tag-green">READ</span></td></tr>
+          <tr><td><code>get_issue</code></td><td>"Get a specific issue with comments"</td><td>No write/delete keywords</td><td><span class="tag tag-green">READ</span></td></tr>
+          <tr><td><code>create_issue</code></td><td>"Create a new GitHub issue"</td><td>"<strong>create</strong>" matches write</td><td><span class="tag tag-amber">WRITE</span></td></tr>
+          <tr><td><code>close_issue</code></td><td>"Close a GitHub issue"</td><td>No exact match → defaults</td><td><span class="tag tag-green">READ</span></td></tr>
+          <tr><td><code>post_message</code></td><td>"Post a message to Slack"</td><td>"<strong>post</strong>" matches write</td><td><span class="tag tag-amber">WRITE</span></td></tr>
+          <tr><td><code>delete_repo</code></td><td>"Delete an entire repository"</td><td>"<strong>delete</strong>" matches destructive</td><td><span class="tag tag-red">DESTRUCTIVE</span></td></tr>
+        </tbody>
+      </table>
+
+      <div class="metaphor-banner red">
+        <h4>Why This Matters</h4>
+        <p>
+          The risk level directly controls whether the AI agent can use the tool automatically or must stop and ask a human first. <strong>READ</strong> tools auto-execute (just reading data — no harm). <strong>WRITE</strong> and <strong>DESTRUCTIVE</strong> tools trigger an <em>interrupt</em> — the LangGraph execution freezes, saves state to PostgreSQL, and the UI shows an orange approval banner until a human clicks Approve or Reject.
+        </p>
+      </div>
+    </div>
+
+    <!-- ═══════════════ 7. CREDENTIAL VAULT ═══════════════ -->
+    <div id="vault" class="card">
+      <h2>7. Credential Vault — Fernet Symmetric Encryption</h2>
+      <p class="card-desc">Where your API tokens go after you paste them — and why nobody can ever see them again.</p>
+
+      <div class="metaphor-banner">
+        <h4>The Metaphor: Bank Night-Deposit Box</h4>
+        <p>
+          When you deposit an envelope into a bank's night-deposit slot, it drops into a steel vault. You can't reach back in. The teller at the front desk can't see what's inside. Only the bank's master key (stored in a separate safe) can open it when a wire transfer must be authorized.
+        </p>
+      </div>
+
+      <h3>The Actual Code:</h3>
+<pre><span class="comment"># backend/vault/credential_vault.py</span>
+
+from cryptography.fernet import Fernet
+from config import settings
+
+class CredentialVault:
+    def __init__(self):
+        <span class="comment"># Master key loaded from .env file (never in code!)</span>
+        key = settings.APP_MASTER_ENCRYPTION_KEY.encode()
+        <span class="highlight">self.fernet = Fernet(key)</span>  <span class="comment"># AES-128-CBC + HMAC-SHA256</span>
+
+    def encrypt(self, plaintext: str) -> str:
+        <span class="comment"># "xoxb-987654321-secret" → "gAAAAABnZ7k8W2qM9..."</span>
+        return self.fernet.encrypt(plaintext.encode()).decode()
+
+    def decrypt(self, ciphertext: str) -> str:
+        <span class="comment"># Only called at the EXACT moment a tool needs the token</span>
+        return self.fernet.decrypt(ciphertext.encode()).decode()
+
+<span class="comment"># Single instance — created once at server startup</span>
+vault = CredentialVault()
+</pre>
+
+      <h3>The 3-Step Ingestion Pipeline:</h3>
+      <div class="flow-card">
+        <div class="flow-card-header">
+          <div class="pill-num">1</div>
+          <strong>Raw Ingress:</strong> You type your Slack token into the browser: <code>xoxb-987654321-secret</code>
+        </div>
+        <p style="margin:0; font-size:14px; color:#64748b;">The browser sends it over HTTPS to <code>POST /api/connections</code>.</p>
+      </div>
+      <div class="connector"><div class="connector-arrow"></div></div>
+      <div class="flow-card">
+        <div class="flow-card-header">
+          <div class="pill-num warn">2</div>
+          <strong>Fernet Scramble:</strong> The Vault encrypts with the master key:
+        </div>
+        <p style="margin:0; font-size:14px; color:#475569;"><code>vault.encrypt("xoxb-987654321-secret")</code> → <code>"gAAAAABnZ7k8W2qM9..."</code> (unreadable gibberish). Raw token wiped from RAM.</p>
+      </div>
+      <div class="connector"><div class="connector-arrow"></div></div>
+      <div class="flow-card">
+        <div class="flow-card-header">
+          <div class="pill-num ok">3</div>
+          <strong>Zero-Leak Masking:</strong> When the browser loads the Connections table:
+        </div>
+        <p style="margin:0; font-size:14px; color:#334155;">The API response replaces the secret with hardcoded dots: <code>••••••••</code>. Neither hackers inspecting the network tab nor rogue employees can extract the real secret.</p>
+      </div>
+    </div>
+
+    <!-- ═══════════════ 8. BUILD ENGINE ═══════════════ -->
+    <div id="build-engine" class="card">
+      <h2>8. Build Engine — The LangGraph 4-Step Brain</h2>
+      <p class="card-desc">When a user describes an agent in plain English, what happens inside the server?</p>
+
+      <div class="metaphor-banner">
+        <h4>The Metaphor: A Job Interview with 4 Rounds</h4>
+        <p>
+          Building an agent is like a 4-round interview. After each round, the interviewer (LangGraph) pauses, shows you what they understood, and asks "Did I get this right?" (an <strong>interrupt</strong>). You confirm or correct, and then the next round starts.
+        </p>
+      </div>
+
+      <div class="flowchart">
+        <div class="fc-box start">
+          <strong>Step 1: Understand</strong>
+          <small>LLM reads user's plain English description → extracts intent, required tools, topology (single agent vs supervisor + workers)</small>
+        </div>
+        <div class="fc-arrow"></div>
+        <div class="fc-label">⏸ INTERRUPT #1 — "Here are the servers I think you need. Confirm?"</div>
+        <div class="fc-arrow"></div>
+        <div class="fc-box decision">
+          <strong>Step 2: Suggest Servers</strong>
+          <small>LLM suggests which MCP servers to use (e.g., "You need GitHub + Slack"). User confirms or adjusts.</small>
+        </div>
+        <div class="fc-arrow"></div>
+        <div class="fc-label">⏸ INTERRUPT #2 — "Connect your credentials for these servers"</div>
+        <div class="fc-arrow"></div>
+        <div class="fc-box process">
+          <strong>Step 3: Wire Connections</strong>
+          <small>Checks if user has active connections for selected servers. If missing, prompts to connect credentials.</small>
+        </div>
+        <div class="fc-arrow"></div>
+        <div class="fc-box end">
+          <strong>Step 4: Generate Config</strong>
+          <small>Produces the final AgentConfig JSON with nodes, tool_requirements, approval_policy → saves to agents table → status: "draft"</small>
+        </div>
+      </div>
+
+      <h3>The AgentConfig JSON (The "Lego Instruction Booklet"):</h3>
+<pre>{
+  "name": "Issue Digest Bot",
+  "topology": "supervisor",
+  "model": "gemini-2.0-flash",
+  "instructions": "Gather open issues, classify by severity, post a digest to Slack.",
+
+  "nodes": [
+    { "id": "supervisor", "role": "Main Coordinator",  "routes_to": ["triager", "reporter"] },
+    { "id": "triager",    "role": "Issue Triager",     "tools": ["github.list_issues"]      },
+    { "id": "reporter",   "role": "Digest Reporter",   "tools": ["slack.post_message"]       }
+  ],
+
+  "tool_requirements": [
+    { "server_type": "github", "tool_name": "list_issues",  "risk": "read",  "approval": "auto"          },
+    { "server_type": "slack",  "tool_name": "post_message", "risk": "write", <span class="highlight">"approval": "require_human"</span> }
+  ],
+
+  "approval_policy": {
+    "read":        "auto",               <span class="comment">// 🟢 safe tools run automatically</span>
+    "write":       <span class="highlight">"require_human"</span>,      <span class="comment">// 🟠 needs human click</span>
+    "destructive": <span class="highlight">"require_human"</span>       <span class="comment">// 🔴 needs human click</span>
+  }
+}</pre>
+    </div>
+
+    <!-- ═══════════════ 9. POSTGRESQL RLS ═══════════════ -->
+    <div id="rls" class="card">
+      <h2>9. Database Bouncer — PostgreSQL Row-Level Security (RLS)</h2>
+      <p class="card-desc">How we guarantee that Company A can NEVER see Company B's data — enforced at the database engine level.</p>
+
+      <div class="metaphor-banner">
+        <h4>The Metaphor: Hotel Elevator Keycard</h4>
+        <p>
+          In a luxury hotel, you step into the elevator and tap your keycard. You're on Floor 4. You press Floor 8, but the elevator refuses to move. Even if you guess codes on the keypad, the elevator mechanically ignores them. That's RLS — the database engine itself refuses to show rows belonging to another tenant.
+        </p>
+      </div>
+
+      <h3>How It Works (3 Steps for Every Request):</h3>
+      <div class="flow-card">
+        <div class="flow-card-header">
+          <div class="pill-num">1</div>
+          <strong>JWT decoded → extract <code>tenant_id</code></strong>
+        </div>
+        <p style="margin:0; font-size:14px; color:#475569;">FastAPI reads the login token from the request header → decodes it → gets <code>tenant_id = "northwind-uuid"</code>.</p>
+      </div>
+      <div class="connector"><div class="connector-arrow"></div></div>
+      <div class="flow-card">
+        <div class="flow-card-header">
+          <div class="pill-num warn">2</div>
+          <strong>Set session variable in PostgreSQL</strong>
+        </div>
+<pre>await session.execute(
+    text("SELECT set_config('app.current_tenant_id', :tid, true)"),
+    {"tid": str(tenant_id)}
+)</pre>
+        <p style="margin:0; font-size:14px; color:#475569;">This tells PostgreSQL: "For this entire database transaction, only show rows where <code>tenant_id</code> matches this UUID."</p>
+      </div>
+      <div class="connector"><div class="connector-arrow"></div></div>
+      <div class="flow-card">
+        <div class="flow-card-header">
+          <div class="pill-num ok">3</div>
+          <strong>PostgreSQL enforces on EVERY query automatically</strong>
+        </div>
+<pre><span class="comment">-- This policy runs silently on every SELECT, INSERT, UPDATE, DELETE:</span>
+CREATE POLICY tenant_isolation ON agents
+  USING (tenant_id = current_setting('app.current_tenant_id')::uuid)
+  WITH CHECK (tenant_id = current_setting('app.current_tenant_id')::uuid);
+
+ALTER TABLE agents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE agents FORCE ROW LEVEL SECURITY;</pre>
+        <p style="margin:0; font-size:14px; color:#16a34a;"><strong>Result:</strong> If Bob (Acme Corp) tries to load Alice's agent URL, PostgreSQL returns zero rows → API returns 404 Not Found. No code can bypass this — it's enforced at the engine level.</p>
+      </div>
+
+      <h3>Tables Protected by RLS (9 out of 11):</h3>
+      <div class="grid-3">
+        <div class="sub-card" style="text-align:center;"><span class="tag tag-green">RLS ON</span><br><code>users</code></div>
+        <div class="sub-card" style="text-align:center;"><span class="tag tag-green">RLS ON</span><br><code>mcp_servers</code></div>
+        <div class="sub-card" style="text-align:center;"><span class="tag tag-green">RLS ON</span><br><code>mcp_tools</code></div>
+        <div class="sub-card" style="text-align:center;"><span class="tag tag-green">RLS ON</span><br><code>connections</code></div>
+        <div class="sub-card" style="text-align:center;"><span class="tag tag-green">RLS ON</span><br><code>agents</code></div>
+        <div class="sub-card" style="text-align:center;"><span class="tag tag-green">RLS ON</span><br><code>agent_runs</code></div>
+        <div class="sub-card" style="text-align:center;"><span class="tag tag-green">RLS ON</span><br><code>build_sessions</code></div>
+        <div class="sub-card" style="text-align:center;"><span class="tag tag-green">RLS ON</span><br><code>review_submissions</code></div>
+        <div class="sub-card" style="text-align:center;"><span class="tag tag-green">RLS ON</span><br><code>installations</code></div>
+        <div class="sub-card" style="text-align:center;"><span class="tag tag-slate">NO RLS</span><br><code>tenants</code><br><small>Shared lookup</small></div>
+        <div class="sub-card" style="text-align:center;"><span class="tag tag-slate">NO RLS</span><br><code>marketplace_listings</code><br><small>Public catalog</small></div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ 10. SCORING ENGINE ═══════════════ -->
+    <div id="scoring" class="card">
+      <h2>10. Scoring Engine — 100-Point Vehicle Inspection</h2>
+      <p class="card-desc">How the platform grades agents with pure math (no AI guessing).</p>
+
+      <div class="metaphor-banner">
+        <h4>The Metaphor: Vehicle Safety Inspection</h4>
+        <p>Before a mechanic gives your car an inspection sticker, they pull out a clipboard with exact checks: Brake pads over 4mm? (+30 pts). Headlights work? (+20 pts). Fuel leak? (Automatic Fail). Our scoring engine does the same for agents.</p>
+      </div>
+
+      <div class="grid-2">
+        <div class="sub-card">
+          <h4>Functionality Score (0–100)</h4>
+          <table>
+            <tr><td>Has instructions &gt; 10 chars</td><td>10 pts</td></tr>
+            <tr><td>Has tool connections</td><td>20 pts</td></tr>
+            <tr><td>Has successful runs</td><td>25 pts</td></tr>
+            <tr><td>Success rate ≥ 70%</td><td>20 pts</td></tr>
+            <tr><td>Average latency &lt; 30s</td><td>10 pts</td></tr>
+            <tr><td>Positive feedback ratio</td><td>15 pts</td></tr>
+          </table>
+        </div>
+        <div class="sub-card" style="border-color: #dc2626;">
+          <h4>Safety Score (0–100)</h4>
+          <table>
+            <tr><td>All WRITE tools gated <span class="tag tag-red">CRITICAL</span></td><td>30 pts</td></tr>
+            <tr><td>All DESTRUCTIVE tools gated <span class="tag tag-red">CRITICAL</span></td><td>30 pts</td></tr>
+            <tr><td>No credentials in config <span class="tag tag-red">CRITICAL</span></td><td>20 pts</td></tr>
+            <tr><td>Instructions are secret-free</td><td>10 pts</td></tr>
+            <tr><td>Model specified</td><td>10 pts</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="sub-card" style="background:#f0fdf4; border-color:#86efac; margin-top: 16px;">
+        <h4 style="color:#166534; margin-top:0;">The Grading Scale:</h4>
+        <p style="margin:0; font-size:14.5px; color:#15803d;">
+          <strong>Average ≥ 85 → Grade A</strong> &nbsp;|&nbsp;
+          <strong>Average ≥ 70 → Grade B</strong> (Eligible to Publish) &nbsp;|&nbsp;
+          <strong>Average &lt; 70 → Grade C / D / F</strong> (Blocked from Marketplace)
+        </p>
+      </div>
+    </div>
+
+    <!-- ═══════════════ 11. HUMAN-IN-THE-LOOP ═══════════════ -->
+    <div id="hitl" class="card">
+      <h2>11. Human-in-the-Loop — Interrupt &amp; Approval</h2>
+      <p class="card-desc">The safety mechanism that makes sure the AI never takes a risky action without asking.</p>
+
+      <div class="metaphor-banner">
+        <h4>The Metaphor: Board Game with a Locked Backpack</h4>
+        <p>
+          A player walks around a board carrying a backpack (<code>AgentState</code>). At each room (node), they read notes from the backpack and add new notes. When they reach a room marked with a 🔴 red traffic light (a WRITE or DESTRUCTIVE tool), they must:
+          <strong>① Drop the backpack on the floor → ② Lock it with a combination lock (the checkpoint_id) → ③ Freeze.</strong>
+          Even if the power goes out, the backpack is safe in the database. When the human clicks Approve, the lock opens and the player resumes.
+        </p>
+      </div>
+
+      <h3>The AgentState (The "Backpack" Data Structure):</h3>
+<pre>class AgentState:
+    messages:         list    <span class="comment"># Chat history [User: "Triage issues", Bot: "Found 3 bugs"]</span>
+    current_node:     str     <span class="comment"># Where on the board? "triager" or "reporter" or "done"</span>
+    approved_actions: list    <span class="comment"># Tools the human approved ["slack.post_message"]</span>
+    rejected_actions: list    <span class="comment"># Tools the human denied</span>
+    final_output:     str     <span class="comment"># The final answer to show the user</span></pre>
+
+      <h3>What Happens at the Red Traffic Light:</h3>
+      <div class="flowchart">
+        <div class="fc-box process">
+          <strong>Agent reaches "post_message" tool</strong>
+          <small>The tool's risk_level = "write" → approval_policy says "require_human"</small>
+        </div>
+        <div class="fc-arrow"></div>
+        <div class="fc-box danger-box">
+          <strong>LangGraph raises an Interrupt</strong>
+          <small>Execution halts → entire AgentState saved to PostgreSQL checkpoints table → server returns { status: "pending_approval" }</small>
+        </div>
+        <div class="fc-arrow"></div>
+        <div class="fc-box decision">
+          <strong>Browser shows Orange Banner</strong>
+          <small>"🟠 Agent wants to call slack.post_message. Message: 'Bug report digest for #engineering'." [Approve] [Reject]</small>
+        </div>
+        <div class="fc-arrow"></div>
+        <div class="fc-box action">
+          <strong>Human clicks [Approve]</strong>
+          <small>POST /api/agents/{id}/runs/{run_id}/approve { approved: true } → LangGraph reloads checkpoint → resumes execution → tool fires → Slack message sent</small>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ 12. COMPLETE REQUEST LIFECYCLE ═══════════════ -->
+    <div id="lifecycle" class="card">
+      <h2>12. Complete Request Lifecycle — What Happens When You Click "Send"</h2>
+      <p class="card-desc">Every byte traced from your browser click to the Slack message and back.</p>
+
+      <div class="flow-card">
+        <div class="flow-card-header">
+          <div class="pill-num">1</div>
+          <strong>React Frontend:</strong> You type "Triage open issues" and click Send.
+        </div>
+        <p style="font-size:14px; color:#475569; margin:0;">Axios sends: <code>POST /api/agents/a1/invoke</code> with body <code>{ message: "Triage open issues" }</code> and header <code>Authorization: Bearer &lt;JWT&gt;</code>.</p>
+      </div>
+      <div class="connector"><div class="connector-arrow"></div></div>
+
+      <div class="flow-card">
+        <div class="flow-card-header">
+          <div class="pill-num">2</div>
+          <strong>FastAPI Gateway:</strong> Authentication + Tenant Context
+        </div>
+        <p style="font-size:14px; color:#475569; margin:0;">Decodes JWT → reads <code>tenant_id = Northwind Labs</code> → runs <code>SET LOCAL app.current_tenant_id = '...'</code> → loads agent config from DB (RLS-scoped).</p>
+      </div>
+      <div class="connector"><div class="connector-arrow"></div></div>
+
+      <div class="flow-card">
+        <div class="flow-card-header">
+          <div class="pill-num purple">3</div>
+          <strong>LangGraph Runtime:</strong> Builds the graph and starts the Supervisor.
+        </div>
+        <p style="font-size:14px; color:#475569; margin:0;">Reads AgentConfig JSON → creates StateGraph → Supervisor routes to <strong>Issue Triager</strong> node → Triager calls <code>GET /mock/github/tools/call/list_issues</code> → returns 3 open bugs.</p>
+      </div>
+      <div class="connector"><div class="connector-arrow"></div></div>
+
+      <div class="flow-card" style="border-color: #dc2626;">
+        <div class="flow-card-header">
+          <div class="pill-num danger">4</div>
+          <strong>The Pause Gate:</strong> Supervisor routes to Digest Reporter → notices <code>slack.post_message</code>
+        </div>
+        <p style="font-size:14px; color:#b91c1c; margin:0;">
+          Runtime halts! Saves state to <code>checkpoints</code> table. Returns to React: <code>{ status: "pending_approval", tool: "slack.post_message" }</code>.
+        </p>
+      </div>
+      <div class="connector"><div class="connector-arrow"></div></div>
+
+      <div class="flow-card" style="border-color: #d97706;">
+        <div class="flow-card-header">
+          <div class="pill-num warn">5</div>
+          <strong>Browser Display:</strong> React shows the Orange Approval Banner.
+        </div>
+        <p style="font-size:14px; color:#92400e; margin:0;">The chat displays: <strong>"🟠 Agent wants to post to Slack. Allow?"</strong> with green [Approve] and red [Reject] buttons.</p>
+      </div>
+      <div class="connector"><div class="connector-arrow"></div></div>
+
+      <div class="flow-card" style="border-color: #16a34a;">
+        <div class="flow-card-header">
+          <div class="pill-num ok">6</div>
+          <strong>Human Approval:</strong> You click [Approve].
+        </div>
+        <p style="font-size:14px; color:#15803d; margin:0;">
+          Axios sends <code>POST /api/agents/a1/runs/{id}/approve { approved: true }</code> → LangGraph reloads checkpoint → decrypts Slack token from Vault → executes <code>post_message</code> → marks run as <strong>SUCCESS</strong> → returns response to chat.
+        </p>
+      </div>
+    </div>
+
+    <!-- ═══════════════ 13. MARKETPLACE ═══════════════ -->
+    <div id="marketplace" class="card">
+      <h2>13. Marketplace &amp; Cross-Tenant Installation</h2>
+      <p class="card-desc">How an agent travels from one company to another — safely.</p>
+
+      <div class="metaphor-banner purple">
+        <h4>The Metaphor: An App Store Download</h4>
+        <p>
+          When you download an app from the App Store, you don't get Apple's internal server credentials or employee data. You get a clean, sanitized package. Similarly, our Marketplace strips ALL company-specific data before publishing.
+        </p>
+      </div>
+
+      <h3>The Sanitization Pipeline (What Gets Stripped):</h3>
+<pre><span class="comment"># backend/marketplace/sanitizer.py — strips company-specific data</span>
+
+def sanitize_for_marketplace(agent, tenant_name):
+    config_str = json.dumps(config)
+
+    <span class="comment"># Remove company name → replace with [Company]</span>
+    config_str = config_str.replace(tenant_name, '[Company]')
+
+    <span class="comment"># Remove emails → [REDACTED_EMAIL]</span>
+    config_str = re.sub(r'[\w.+-]+@[\w-]+\.[\w.-]+', '[REDACTED_EMAIL]', config_str)
+
+    <span class="comment"># Remove API keys (OpenAI, Slack, GitHub tokens)</span>
+    config_str = re.sub(r'sk-[a-zA-Z0-9_-]{16,}', '[REDACTED_KEY]', config_str)
+    config_str = re.sub(r'xoxb-[a-zA-Z0-9_-]+',   '[REDACTED_TOKEN]', config_str)
+    config_str = re.sub(r'ghp_[a-zA-Z0-9_-]+',     '[REDACTED_TOKEN]', config_str)
+
+    <span class="comment"># Remove internal URLs</span>
+    config_str = re.sub(r'https?://(?:internal|corp)[\w./-]*', '[REDACTED_URL]', config_str)
+
+    return sanitized_config   <span class="comment"># Clean, safe to publish</span>
+</pre>
+
+      <h3>Installation Flow (What Happens When Someone Clicks "Install"):</h3>
+      <div class="flowchart">
+        <div class="fc-box start">
+          <strong>Bob (Acme Corp) browses Marketplace</strong>
+          <small>GET /api/marketplace → sees "Issue Digest Bot" by Northwind Labs, Grade A, 12 installs</small>
+        </div>
+        <div class="fc-arrow"></div>
+        <div class="fc-box process">
+          <strong>Clicks "Install"</strong>
+          <small>POST /api/marketplace/{listing_id}/install → copies config_template into Bob's tenant → creates new Agent in Acme Corp's agents table</small>
+        </div>
+        <div class="fc-arrow"></div>
+        <div class="fc-box decision">
+          <strong>Missing Connections Detected</strong>
+          <small>Agent requires GitHub + Slack servers, but Bob's Acme Corp doesn't have Slack connected yet → UI prompts Bob to connect credentials</small>
+        </div>
+        <div class="fc-arrow"></div>
+        <div class="fc-box end">
+          <strong>Bob runs the agent in his own Playground</strong>
+          <small>Agent uses Bob's credentials, runs in Bob's tenant, data isolated via RLS — Northwind Labs never sees Bob's data</small>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ 14. PROJECT FOLDER MAP ═══════════════ -->
+    <div id="folder" class="card">
+      <h2>14. Project Folder Map</h2>
+      <p class="card-desc">Every file and its purpose.</p>
+
+<pre>agent-platform/
+├── docker-compose.yml              <span class="comment"># One command starts everything</span>
+├── .env                            <span class="comment"># Master encryption key, JWT secret, API keys</span>
+├── README.md                       <span class="comment"># Quick start + demo credentials</span>
+│
+├── backend/
+│   ├── main.py                     <span class="comment"># FastAPI app — mounts all routers</span>
+│   ├── config.py                   <span class="comment"># Pydantic Settings — reads .env</span>
+│   ├── mock_server.py              <span class="comment"># Dev server with mock data</span>
+│   │
+│   ├── auth/
+│   │   ├── router.py               <span class="comment"># /api/auth/login, /register, /me</span>
+│   │   ├── jwt.py                  <span class="comment"># create_access_token, decode_access_token</span>
+│   │   └── dependencies.py         <span class="comment"># get_current_user, require_admin</span>
+│   │
+│   ├── db/
+│   │   ├── init.sql                <span class="comment"># 11 tables + RLS policies + seed data</span>
+│   │   ├── database.py             <span class="comment"># get_tenant_session (SET LOCAL tenant_id)</span>
+│   │   ├── models.py               <span class="comment"># SQLAlchemy ORM models</span>
+│   │   └── checkpoint.py           <span class="comment"># LangGraph PostgreSQL checkpointer</span>
+│   │
+│   ├── <span class="highlight">mcp_registry/</span>               <span class="comment"># ★ OUR CUSTOM MCP REGISTRY</span>
+│   │   ├── client.py               <span class="comment"># introspect_mcp_server + classify_tool_risk</span>
+│   │   └── router.py               <span class="comment"># CRUD endpoints for MCP servers &amp; tools</span>
+│   │
+│   ├── mcp_servers/
+│   │   ├── github_mock.py          <span class="comment"># Built-in mock GitHub MCP server</span>
+│   │   └── slack_mock.py           <span class="comment"># Built-in mock Slack MCP server</span>
+│   │
+│   ├── vault/
+│   │   └── credential_vault.py     <span class="comment"># Fernet encrypt/decrypt</span>
+│   │
+│   ├── connections/
+│   │   └── router.py               <span class="comment"># CRUD for encrypted credentials</span>
+│   │
+│   ├── build/
+│   │   ├── router.py               <span class="comment"># /api/build/start, /{id}/resume</span>
+│   │   └── graph.py                <span class="comment"># LangGraph 4-step build state machine</span>
+│   │
+│   ├── agents/
+│   │   ├── router.py               <span class="comment"># invoke, approve, publish, scores</span>
+│   │   ├── runtime.py              <span class="comment"># build_agent_graph (config → LangGraph)</span>
+│   │   └── scoring.py              <span class="comment"># 100-point functionality + safety checks</span>
+│   │
+│   ├── marketplace/
+│   │   ├── router.py               <span class="comment"># browse, install, list listings</span>
+│   │   └── sanitizer.py            <span class="comment"># Strip secrets + company data</span>
+│   │
+│   └── admin/
+│       └── router.py               <span class="comment"># Review queue for publishing</span>
+│
+└── frontend/
+    └── src/
+        ├── App.jsx                 <span class="comment"># Tab navigation + auth wrapper</span>
+        ├── main.jsx                <span class="comment"># ReactDOM render</span>
+        ├── api/
+        │   └── client.js           <span class="comment"># Axios instance with JWT interceptor</span>
+        ├── store/
+        │   └── authStore.js        <span class="comment"># Zustand state for login</span>
+        ├── pages/
+        │   ├── LoginPage.jsx       <span class="comment"># Email + password form</span>
+        │   ├── MCPServersPage.jsx  <span class="comment"># Register/list MCP servers</span>
+        │   ├── ConnectionsPage.jsx <span class="comment"># Connect credentials</span>
+        │   ├── BuildPage.jsx       <span class="comment"># 4-step agent builder wizard</span>
+        │   ├── AgentsPage.jsx      <span class="comment"># List agents + playground chat</span>
+        │   ├── MarketplacePage.jsx <span class="comment"># Browse + install agents</span>
+        │   └── AdminPage.jsx       <span class="comment"># Review queue (admin only)</span>
+        └── components/
+            ├── ApprovalBanner.jsx  <span class="comment"># Orange HITL approval UI</span>
+            └── ScoreCard.jsx       <span class="comment"># Functionality + Safety grade display</span>
+</pre>
+    </div>
+
+    <div class="section-sep"></div>
+
+  </div>
+
+  <div class="footer">
+    <strong>Data Sense — Agent Builder Platform</strong><br>
+    Complete Architecture + Low-Level System Design • Capstone Project<br>
+    Built with React • FastAPI • LangGraph • PostgreSQL • Custom MCP Registry • Fernet Encryption
+  </div>
+
+</body>
+</html>
