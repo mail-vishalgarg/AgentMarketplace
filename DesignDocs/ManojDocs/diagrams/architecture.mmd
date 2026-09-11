@@ -1,0 +1,67 @@
+%% Forge — Architecture Diagram (Alternative A: modular monolith, single Postgres w/ RLS)
+%% Revised alongside architecture/architecture.md per architecture-review.md findings (REVARCH-001..015).
+%% See architecture.md for full rationale. Dashed edges = LLM calls (external, informational).
+%% Dotted edges = credential fetch-use-drop, held only in local non-serialized scope (REVARCH-009).
+
+flowchart TB
+
+  subgraph EXT["External systems (outside the system boundary)"]
+    MCP["MCP Servers<br/>http / sse / stdio<br/>(FR-003..FR-008)"]
+    LLM["LLM / Model Provider<br/>(free tier or local — C3)<br/>failure handling: open assumption, §6"]
+  end
+
+  subgraph FE["Frontend SPA — separate deployable (UI-001..UI-014)"]
+    UI["signin · registry · connections · build ·<br/>my-agents · agent detail (6 tabs) · review · marketplace"]
+  end
+
+  subgraph BE["Backend — modular monolith, single deployable"]
+    API["API Layer<br/>auth + company-scope + 404-mask (ALL company-scoped routes) + idempotency<br/>(FR-001,FR-002,FR-054,FR-055,SEC-002,SEC-011,SEC-012,SEC-014,API-001..006)"]
+    ID["Identity & Session<br/>(FR-001, FR-002)"]
+    REG["MCP Registry & Introspection<br/>(FR-003..FR-008, SEC-014, NFR-005, WF-001, WF-008)"]
+    VAULT["Credential Vault<br/>encrypt / fetch-use-drop, never in checkpointed state<br/>(SEC-003..SEC-006, NFR-001, NFR-002, NFR-005)"]
+    BUILDG["Agent Builder Graph — LangGraph<br/>2 durable interrupts · single writer of config (DATA-007)<br/>supports single + supervisor/specialist topology<br/>(FR-015..FR-024, FR-058, FR-059, FR-060, WF-003)"]
+    EXECG["Agent Execution Graph — LangGraph<br/>approval interrupt · credential never in graph state<br/>(FR-025..FR-038, FR-058, FR-059, FR-060, SEC-007, SEC-008, WF-004)"]
+    SCORE["Scoring Engine<br/>(FR-056, FR-057, NFR-009)"]
+    REVIEWG["Publish & Admin Review Graph — LangGraph<br/>multi-day interrupt, passive at rest<br/>(FR-039..FR-048, SEC-009, SEC-010, WF-005, NFR-010)"]
+    MARKET["Marketplace & Install<br/>allowlist copy, not blocklist<br/>(FR-049..FR-053, SEC-013, SEC-015, WF-006)"]
+    PAPI["Public Agent API + Postman Export<br/>behind API Layer's wrapper<br/>(FR-035..FR-038, API-001..API-006)"]
+  end
+
+  subgraph DATA["Persistence — Postgres, RLS keyed on company_id (design choice, spec.md §15 A6)"]
+    DB[("Domain data (companies, users, agents,\nconnections, servers, runs, submissions)\n+ LangGraph checkpoints for all 3 graphs\nchkpt writes MUST carry same RLS discipline —\nnot a separate unscoped connection (REVARCH-010)\n(SEC-001, NFR-003, NFR-006, NFR-007)")]
+  end
+
+  UI -->|HTTPS| API
+  API --> ID
+  API --> REG
+  API --> VAULT
+  API --> BUILDG
+  API --> EXECG
+  API --> REVIEWG
+  API --> MARKET
+  API --> PAPI
+
+  REG -->|introspect tool list| MCP
+  BUILDG -->|proposes servers from| REG
+  BUILDG -->|checks connections via| VAULT
+  BUILDG -.->|LLM call: understand + draft config| LLM
+  EXECG -->|invoke tool| MCP
+  EXECG -.->|LLM call: agent turn| LLM
+  EXECG -.->|fetch, use, drop — local scope only, never serialized| VAULT
+  EXECG --> SCORE
+  MARKET -->|deep copy: allowlist of design-safe fields only| REVIEWG
+
+  ID --> DB
+  REG --> DB
+  VAULT --> DB
+  BUILDG --> DB
+  EXECG --> DB
+  SCORE --> DB
+  REVIEWG --> DB
+  MARKET --> DB
+  PAPI --> DB
+
+  classDef ext fill:#f2f2f2,stroke:#888,color:#333
+  classDef revised stroke:#0a7,stroke-width:2px
+  class MCP,LLM ext
+  class API,REG,VAULT,BUILDG,EXECG,MARKET,DB,PAPI revised

@@ -1,0 +1,76 @@
+%% Forge — HLD Component Diagram
+%% Decomposes architecture/architecture.md's 12 components into HLD-level interfaces.
+%% See architecture/hld.md §1 for full purpose/responsibilities/data ownership per component.
+%% D1-D9 = decisions recorded in hld.md §0. Red-bordered nodes carry an open decision (D3/D4/D6).
+%% Revised per architecture/hld-review.md: RLS exceptions (HLDREV-001) + setVisibility op (HLDREV-002).
+
+flowchart TB
+
+  subgraph EXT["External systems"]
+    MCP["MCP Servers<br/>http/sse/stdio"]
+    LLM["LLM Provider<br/>failure handling: open assumption"]
+    PM["Postman (output only)"]
+  end
+
+  subgraph FE["1.12 Frontend SPA"]
+    UI["8 screens + new: pending-classification view (D2)"]
+  end
+
+  subgraph API_L["1.1 API Layer"]
+    API["Auth + company/owner scope (D1) + 404-mask + idempotency (D9)"]
+  end
+
+  subgraph CORE["Backend — modular monolith"]
+    ID["1.2 Identity & Session<br/>issues bearer token (D7)"]
+    REG["1.3 Registry & Introspection<br/>pending_classification state (D2)"]
+    VLT["1.4 Credential Vault<br/>fetchForCall: local scope only"]
+    BLD["1.5 Builder Graph<br/>single writer of AgentConfiguration<br/>sets owner_user_id + visibility (D1)<br/>setVisibility(): the 'Change' op (HLDREV-002 fix)"]
+    EXE["1.6 Execution Graph<br/>credential never in checkpointed state"]
+    SCORE["1.9 Scoring Engine"]
+    REVG["1.7 Publish & Review Graph<br/>Reject/resubmit: OPEN (D4)"]
+    MKT["1.8 Marketplace & Install<br/>allowlist copy; strips author id"]
+    PAPI["1.11 Public Agent API +<br/>Postman Export"]
+  end
+
+  subgraph DATA["1.10 Persistence Layer — Postgres"]
+    DB[("RLS: company_id (hard) +<br/>owner_user_id/visibility (D1, Agent only)<br/>EXCEPTIONS (HLDREV-001 fix): MarketplaceListing,<br/>Submission, published Score/Grade are globally/<br/>admin readable, not company-scoped<br/>Checkpoint pool: same RLS discipline (D6, open),<br/>one shared connection helper (HLDREV-008 fix)<br/>3 graphs' checkpoint state + all domain tables")]
+  end
+
+  UI -->|"HTTPS, bearer token"| API
+  API --> ID
+  API --> REG
+  API --> VLT
+  API --> BLD
+  API --> EXE
+  API --> REVG
+  API --> MKT
+  API --> PAPI
+
+  REG -->|"introspect"| MCP
+  BLD -->|"search (non-pending tools only)"| REG
+  BLD -->|"check existence only"| VLT
+  BLD -.->|"LLM: understand + draft"| LLM
+  EXE -->|"invoke tool"| MCP
+  EXE -.->|"LLM: agent turn"| LLM
+  EXE -.->|"fetchForCall — local scope"| VLT
+  EXE --> SCORE
+  REVG --> SCORE
+  REVG -->|"approve → publish()"| MKT
+  PAPI --> EXE
+  PAPI -->|"generate"| PM
+
+  ID --> DB
+  REG --> DB
+  VLT --> DB
+  BLD --> DB
+  EXE --> DB
+  SCORE --> DB
+  REVG --> DB
+  MKT --> DB
+
+  classDef ext fill:#f2f2f2,stroke:#888,color:#333
+  classDef open stroke:#c00,stroke-width:2px,stroke-dasharray:4 2
+  classDef resolved stroke:#0a7,stroke-width:2px
+  class MCP,LLM,PM ext
+  class REVG,ID open
+  class REG,BLD,DB resolved

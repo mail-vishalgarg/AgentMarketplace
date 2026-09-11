@@ -1,0 +1,125 @@
+%% Forge — LLD Entity-Relationship Diagram
+%% See architecture/lld.md §9-11 for column-level detail, RLS exceptions, and index rationale.
+%% RLS applies to every table EXCEPT marketplace_listings and submissions (HLDREV-001 exceptions,
+%% marked below); scores/checks inherit the exception once their agent is published.
+
+erDiagram
+    COMPANIES ||--o{ USERS : "has"
+    COMPANIES ||--o{ SERVERS : "owns (nullable if global)"
+    COMPANIES ||--o{ CONNECTIONS : "owns"
+    COMPANIES ||--o{ AGENTS : "owns"
+
+    USERS ||--o{ AGENTS : "owner_user_id (D1)"
+    USERS ||--o{ CONNECTIONS : "owner_user_id"
+    USERS ||--o{ TOOLS : "confirmed_by_admin_id"
+    USERS ||--o{ SUBMISSIONS : "submitted_by_user_id / decided_by_admin_id"
+    USERS ||--o{ INSTALLATIONS : "installer_user_id"
+
+    SERVERS ||--o{ TOOLS : "has"
+    SERVERS ||--o{ CONNECTIONS : "connected via"
+
+    AGENTS ||--|| AGENT_CONFIGURATIONS : "has one (DATA-007 document, JSONB)"
+    AGENTS ||--o{ RUNS : "has"
+    AGENTS ||--|| SCORES : "has one"
+    AGENTS ||--o{ SUBMISSIONS : "submitted as"
+    AGENTS ||--o{ CHECKPOINTS : "builder/execution threads"
+
+    SCORES ||--o{ CHECKS : "itemized by"
+
+    SUBMISSIONS ||--o| MARKETPLACE_LISTINGS : "approved -> published"
+    SUBMISSIONS ||--o{ CHECKPOINTS : "review thread"
+
+    MARKETPLACE_LISTINGS ||--o{ INSTALLATIONS : "installed as"
+    INSTALLATIONS ||--|| AGENTS : "new_agent_id (independent copy, no FK back to original)"
+
+    COMPANIES {
+        uuid id PK
+        text name
+    }
+    USERS {
+        uuid id PK
+        uuid company_id FK
+        text email UK
+        text password_hash
+        bool is_admin
+    }
+    SERVERS {
+        uuid id PK
+        uuid company_id FK "nullable if scope=global"
+        text name
+        text transport
+        text scope
+        text status "ok | down"
+    }
+    TOOLS {
+        uuid id PK
+        uuid server_id FK
+        text risk_status "pending_classification | confirmed (D2)"
+        text risk_level "read|write|destructive, nullable until confirmed"
+        uuid confirmed_by_admin_id FK
+    }
+    CONNECTIONS {
+        uuid id PK
+        uuid company_id FK
+        uuid server_id FK
+        uuid owner_user_id FK
+        text status "active|expired|revoked"
+        bytea encrypted_secret
+    }
+    AGENTS {
+        uuid id PK
+        uuid company_id FK
+        uuid owner_user_id FK "D1"
+        text visibility "private_to_owner|shared_with_company (D1)"
+        text status
+        text topology
+    }
+    AGENT_CONFIGURATIONS {
+        uuid id PK
+        uuid agent_id FK UK
+        jsonb config_json "DATA-007 - deliberately not normalized"
+        int version
+    }
+    RUNS {
+        uuid id PK
+        uuid agent_id FK
+        text status "ok|wait|err"
+        int latency_ms
+    }
+    SCORES {
+        uuid id PK
+        uuid agent_id FK UK
+        int capability_score "nullable = not tested yet"
+        text governance_grade
+    }
+    CHECKS {
+        uuid id PK
+        uuid score_id FK
+        bool ok
+        text description
+    }
+    SUBMISSIONS {
+        uuid id PK
+        uuid agent_id FK
+        uuid company_id FK
+        text status "pending|approved|changes_requested|rejected"
+    }
+    MARKETPLACE_LISTINGS {
+        uuid id PK
+        uuid submission_id FK
+        text org_name
+        jsonb stripped_config_json "allowlist copy only"
+    }
+    INSTALLATIONS {
+        uuid id PK
+        uuid listing_id FK
+        uuid installer_company_id FK
+        uuid new_agent_id FK
+    }
+    CHECKPOINTS {
+        text thread_id PK
+        text graph_type "builder|execution|review"
+        uuid company_id FK "D6 RLS fallback column"
+        uuid owner_user_id FK "nullable, D6"
+        text status "pending|resolved"
+    }
